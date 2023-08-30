@@ -1,0 +1,8 @@
+[control]
+url = "mqtt://localhost:1883"
+user = "mqtt"
+pass = "pass"
+topic = "control"
+
+[target]
+url = "mqtt://localhost:1883"
