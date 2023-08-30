@@ -8,7 +8,7 @@ use crate::generator::Generator;
 
 pub struct Device {
     thread_id: i32,
-    generators: Vec<&dyn Generator>,
+    generators: Vec<Box<dyn Generator>>,
     wait_time_secs: u16,
     receiver: mpsc::Receiver<bool>,
 }
@@ -41,10 +41,7 @@ impl Device {
                does every device run an own client? Probably, for realistic conditions
                I should probably read the config somewhere beforehand...
             */
-            debug!(
-                "Thread {} working with parameter: {}",
-                self.thread_id, self.data_points
-            );
+            debug!("Thread {} working", self.thread_id);
 
             let nap_time = Duration::from_secs(self.wait_time_secs.into());
             if let Ok(_msg) = self.receiver.recv_timeout(nap_time) {

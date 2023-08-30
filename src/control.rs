@@ -40,8 +40,11 @@ impl Control {
 
             let data_points = start_param.data_points;
             let wait_time_secs = start_param.wait_time_secs;
-            let mut device = Device::new(i, data_points, wait_time_secs, receiver);
-            let handle = thread::spawn(move || device.run());
+
+            let handle = thread::spawn(move || {
+                let mut device = Device::new(i, data_points, wait_time_secs, receiver);
+                device.run()
+            });
             self.threads.push(handle);
 
             thread::sleep(spawn_delay);
