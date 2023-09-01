@@ -6,3 +6,9 @@ topic = "control"
 
 [target]
 url = "mqtt://localhost:1883"
+user = "mqtt"
+pass = "pass"
+devices = 10
+data_points = 10
+wait_time_secs = 10
+seed = 1

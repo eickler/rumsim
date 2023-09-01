@@ -14,6 +14,12 @@ pub struct Control {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Target {
     pub url: String,
+    pub user: String,
+    pub pass: String,
+    pub devices: u32,
+    pub data_points: u16,
+    pub wait_time_secs: u16,
+    pub seed: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

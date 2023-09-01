@@ -44,7 +44,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut control = control::Control::new();
+    let mut control = control::Control::new(&CONFIG.target);
 
     loop {
         let notification = eventloop.poll().await.unwrap();

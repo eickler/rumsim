@@ -1,18 +1,21 @@
 use crate::commands::{Command, StartParam};
 use crate::device::Device;
+use crate::settings::Target;
 use log::{debug, warn};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 pub struct Control {
+    target: Target,
     threads: Vec<thread::JoinHandle<()>>,
     channels: Vec<mpsc::Sender<bool>>,
 }
 
 impl Control {
-    pub fn new() -> Self {
+    pub fn new(target: &Target) -> Self {
         Control {
+            target: target.clone(),
             threads: Vec::new(),
             channels: Vec::new(),
         }
@@ -38,11 +41,10 @@ impl Control {
             let (sender, receiver) = mpsc::channel();
             self.channels.push(sender);
 
-            let data_points = start_param.data_points;
-            let wait_time_secs = start_param.wait_time_secs;
+            let target = self.target.clone();
 
             let handle = thread::spawn(move || {
-                let mut device = Device::new(i, data_points, wait_time_secs, receiver);
+                let mut device = Device::new(i, receiver, target);
                 device.run()
             });
             self.threads.push(handle);
