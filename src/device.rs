@@ -10,7 +10,7 @@ use std::{
 #[cfg(not(test))]
 use log::debug;
 #[cfg(test)]
-use mockall::{automock, predicate::*};
+use mockall::automock;
 #[cfg(test)]
 use std::println as debug;
 
@@ -153,22 +153,33 @@ fn create_mqtt_connection(thread_id: &u32, target: &Target) -> AsyncClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::settings::dummy_target;
-
     use super::*;
+    use crate::settings::dummy_target;
+    use mockall::predicate::*;
+    use regex::Regex;
 
+    // TODO Improve test coverage here
     #[test]
-    fn test_starting() {
+    fn test_publish() {
+        let thread_id = 1;
+
         let (sender, receiver) = mpsc::channel();
         let _ = sender.send(true); // Make sure to send only one round of data.
 
         let target = dummy_target();
+
         let mut mock = MockMqttClient::new();
+
+        let topic_check =
+            function(|x: &String| Regex::new(r"^/device_[0-9]+/").unwrap().is_match(x));
+        let data_check = function(|x: &String| Regex::new(r"^[0-9]+,[0-9]+").unwrap().is_match(x));
+
         mock.expect_publish()
-            .with(always(), always())
+            .with(topic_check, data_check)
             .times(usize::from(target.data_points))
             .returning(|_, _| ());
-        let mut device = Device::new(1, receiver, target, mock);
+
+        let mut device = Device::new(thread_id, receiver, target, mock);
         device.run();
     }
 }
