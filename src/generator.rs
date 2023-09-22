@@ -1,5 +1,4 @@
 //! Generate numerical data to simulate IoT device data points.
-//! TODO: I wanted this originally to be seedable, but the thread-safe RNG is not seedable.
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::f64::consts::PI;
 
@@ -12,8 +11,7 @@ pub enum GeneratorType {
 
 /// Generate the next numerical value for a data point.
 pub trait Generator {
-    fn name(&mut self) -> &str;
-    fn generate(&mut self) -> f64;
+    fn generate(&mut self) -> (&str, f64);
 }
 
 /// Factory method for creating a new generator.
@@ -45,13 +43,9 @@ impl NoiseGenerator {
 }
 
 impl Generator for NoiseGenerator {
-    fn name(&mut self) -> &str {
-        &self.name
-    }
-
-    fn generate(&mut self) -> f64 {
+    fn generate(&mut self) -> (&str, f64) {
         let value: u16 = self.rng.gen();
-        value.into()
+        (&self.name, value.into())
     }
 }
 
@@ -89,11 +83,7 @@ const JITTER: f64 = 2.0;
 const SPREAD: u32 = 100;
 
 impl Generator for SensorGenerator {
-    fn name(&mut self) -> &str {
-        &self.name
-    }
-
-    fn generate(&mut self) -> f64 {
+    fn generate(&mut self) -> (&str, f64) {
         let x: f64 = 2.0 * PI * f64::from(self.index) / f64::from(SPREAD);
         let plain_value = x.sin() * DELTA_TEMPERATURE + AVG_TEMPERATURE;
         let jitter_value: f64 = JITTER * 2.0 * self.rng.gen::<f64>() - JITTER + plain_value;
@@ -103,7 +93,7 @@ impl Generator for SensorGenerator {
         } else {
             self.index += 1;
         }
-        rounded_value
+        (&self.name, rounded_value)
     }
 }
 
@@ -134,18 +124,14 @@ impl StatusGenerator {
 const SUSTAIN: u16 = 100;
 
 impl Generator for StatusGenerator {
-    fn name(&mut self) -> &str {
-        &self.name
-    }
-
-    fn generate(&mut self) -> f64 {
+    fn generate(&mut self) -> (&str, f64) {
         if self.index == SUSTAIN {
             self.index = 0;
             self.current_value = self.rng.gen()
         } else {
             self.index += 1;
         }
-        self.current_value.into()
+        (&self.name, self.current_value.into())
     }
 }
 
@@ -156,19 +142,19 @@ mod tests {
     #[test]
     fn test_noise_generator() {
         let mut gen = NoiseGenerator::new(1);
-        let value = gen.generate();
+        let (_name, value) = gen.generate();
         assert!((0.0..u16::MAX as f64).contains(&value));
     }
 
     #[test]
     fn test_sensor_generator() {
         let mut gen = SensorGenerator::new(1);
-        let mut value = gen.generate();
+        let (mut _name, mut value) = gen.generate();
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
 
         for _i in 0..SPREAD - 1 {
-            value = gen.generate();
+            (_name, value) = gen.generate();
         }
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
@@ -177,14 +163,14 @@ mod tests {
     #[test]
     fn test_status_generator() {
         let mut gen = StatusGenerator::new(1);
-        let start_value = gen.generate();
+        let (_name, start_value) = gen.generate();
 
         for _i in 0..SUSTAIN - 1 {
-            let value = gen.generate();
+            let (_name, value) = gen.generate();
             assert_eq!(start_value, value);
         }
 
-        let next_value = gen.generate(); // With a fixed seed, we can avoid the 1/65536 chance that the same value is generated.
+        let (_name, next_value) = gen.generate(); // With a fixed seed, we can avoid the 1/65536 chance that the same value is generated.
         assert_ne!(start_value, next_value);
     }
 

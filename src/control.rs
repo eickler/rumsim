@@ -70,11 +70,13 @@ impl Control {
 
 #[cfg(test)]
 mod tests {
+    use crate::settings::dummy_target;
+
     use super::*;
 
     #[test]
     fn test_start_stop_threads() {
-        let mut control = Control::new();
+        let mut control = Control::new(&dummy_target());
         let start_param = StartParam {
             devices: 10,
             data_points: 10,
@@ -90,7 +92,7 @@ mod tests {
 
     #[test]
     fn test_restart_threads() {
-        let mut control = Control::new();
+        let mut control = Control::new(&dummy_target());
         let start_param = StartParam {
             devices: 2,
             data_points: 10,
