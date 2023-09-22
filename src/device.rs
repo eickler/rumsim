@@ -1,4 +1,5 @@
-use log::debug;
+use async_trait::async_trait;
+use futures::executor::block_on;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use std::{
@@ -6,28 +7,53 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(not(test))]
+use log::debug;
+#[cfg(test)]
+use mockall::{automock, predicate::*};
+#[cfg(test)]
+use std::println as debug;
+
 use crate::{
-    generator::{create, Generator, GeneratorType},
+    generator::{create_generator, Generator, GeneratorType},
     settings::Target,
 };
 
-pub struct Device {
+#[cfg_attr(test, automock)]
+#[async_trait]
+pub trait MqttClient {
+    async fn publish(&self, topic: String, payload: String);
+}
+
+#[async_trait]
+impl MqttClient for rumqttc::AsyncClient {
+    async fn publish(&self, topic: String, payload: String) {
+        self.publish(topic, QoS::AtLeastOnce, false, payload)
+            .await
+            .unwrap();
+    }
+}
+
+pub struct Device<T: MqttClient> {
     thread_id: u32,
     name: String,
     generators: Vec<Box<dyn Generator>>,
     wait_time_secs: u16,
     receiver: mpsc::Receiver<bool>,
-    mqtt: AsyncClient,
+    mqtt: T,
 }
 
-#[derive(serde::Serialize)]
-struct Measurement {
-    pub time: SystemTime,
-    pub value: f64,
+pub fn create_device(
+    thread_id: u32,
+    receiver: mpsc::Receiver<bool>,
+    target: Target,
+) -> Device<AsyncClient> {
+    let mqtt = create_mqtt_connection(&thread_id, &target);
+    Device::new(thread_id, receiver, target, mqtt)
 }
 
-impl Device {
-    pub fn new(thread_id: u32, receiver: mpsc::Receiver<bool>, target: Target) -> Self {
+impl<T: MqttClient> Device<T> {
+    fn new(thread_id: u32, receiver: mpsc::Receiver<bool>, target: Target, mqtt: T) -> Self {
         let mut name = String::from("/device_");
         name.push_str(&thread_id.to_string());
         name.push_str("/");
@@ -36,8 +62,6 @@ impl Device {
         let data_points = target.data_points;
         let generators = create_data_point_generators(seed, data_points);
 
-        let _mqtt = create_mqtt_connection(&thread_id, &target);
-
         let wait_time_secs = target.wait_time_secs;
         Device {
             thread_id,
@@ -45,13 +69,14 @@ impl Device {
             generators,
             wait_time_secs,
             receiver,
-            mqtt: _mqtt,
+            mqtt,
         }
     }
 
     pub fn run(&mut self) {
         loop {
-            self.work();
+            // TODO There's probably a better way to both send the stuff and wait for a while for a message.
+            block_on(self.work());
             if self.nap_or_stop() {
                 break;
             }
@@ -61,6 +86,7 @@ impl Device {
 
     async fn work(&mut self) {
         debug!("Thread {} working", self.thread_id);
+        let mut futures = Vec::new();
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -77,11 +103,10 @@ impl Device {
             data.push_str(",");
             data.push_str(&value.to_string());
 
-            self.mqtt
-                .publish(topic, QoS::AtLeastOnce, false, data)
-                .await
-                .unwrap();
+            let f = self.mqtt.publish(topic, data);
+            futures.push(f);
         }
+        futures::future::join_all(futures).await;
     }
 
     fn nap_or_stop(&mut self) -> bool {
@@ -98,17 +123,17 @@ fn create_data_point_generators(seed: u64, data_points: u16) -> Vec<Box<dyn Gene
     let mut generators = Vec::new();
 
     for _i in 0..data_points / 3 {
-        let generator = create(GeneratorType::Status, rng.gen());
+        let generator = create_generator(GeneratorType::Status, rng.gen());
         generators.push(generator);
     }
 
     for _i in data_points / 3..2 * data_points / 3 {
-        let generator = create(GeneratorType::Noise, rng.gen());
+        let generator = create_generator(GeneratorType::Noise, rng.gen());
         generators.push(generator);
     }
 
     for _i in 2 * data_points / 3..data_points {
-        let generator = create(GeneratorType::Sensor, rng.gen());
+        let generator = create_generator(GeneratorType::Sensor, rng.gen());
         generators.push(generator);
     }
     generators
@@ -133,8 +158,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_creation() {
-        let (_sender, receiver) = mpsc::channel();
-        let _device = Device::new(1, receiver, dummy_target());
+    fn test_starting() {
+        let (sender, receiver) = mpsc::channel();
+        let _ = sender.send(true); // Make sure to send only one round of data.
+
+        let target = dummy_target();
+        let mut mock = MockMqttClient::new();
+        mock.expect_publish()
+            .with(always(), always())
+            .times(usize::from(target.data_points))
+            .returning(|_, _| ());
+        let mut device = Device::new(1, receiver, target, mock);
+        device.run();
     }
 }

@@ -1,5 +1,5 @@
 use crate::commands::{Command, StartParam};
-use crate::device::Device;
+use crate::device::create_device;
 use crate::settings::Target;
 use log::{debug, warn};
 use std::sync::mpsc;
@@ -28,6 +28,7 @@ impl Control {
         }
     }
 
+    // TODO: Could this be done just with async await instead of threads?
     fn start(&mut self, start_param: &StartParam) {
         self.stop();
 
@@ -44,7 +45,7 @@ impl Control {
             let target = self.target.clone();
 
             let handle = thread::spawn(move || {
-                let mut device = Device::new(i, receiver, target);
+                let mut device = create_device(i, receiver, target);
                 device.run()
             });
             self.threads.push(handle);

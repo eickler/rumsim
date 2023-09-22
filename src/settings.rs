@@ -23,6 +23,7 @@ pub struct Target {
 }
 
 // Make this a method for generating?
+#[cfg(test)]
 pub fn dummy_target() -> Target {
     Target {
         url: String::from("mqtt://localhost:1883"),

@@ -15,7 +15,7 @@ pub trait Generator {
 }
 
 /// Factory method for creating a new generator.
-pub fn create(generator_type: GeneratorType, seed: u64) -> Box<dyn Generator> {
+pub fn create_generator(generator_type: GeneratorType, seed: u64) -> Box<dyn Generator> {
     match generator_type {
         GeneratorType::Noise => Box::new(NoiseGenerator::new(seed)),
         GeneratorType::Sensor => Box::new(SensorGenerator::new(seed)),
@@ -177,11 +177,11 @@ mod tests {
     #[test]
     fn test_factory() {
         // TODO: Can I test the type that is returned by the factory?
-        let mut noise = create(GeneratorType::Noise, 1);
+        let mut noise = create_generator(GeneratorType::Noise, 1);
         noise.generate();
-        let mut sensor = create(GeneratorType::Sensor, 1);
+        let mut sensor = create_generator(GeneratorType::Sensor, 1);
         sensor.generate();
-        let mut status = create(GeneratorType::Status, 1);
+        let mut status = create_generator(GeneratorType::Status, 1);
         status.generate();
     }
 }
