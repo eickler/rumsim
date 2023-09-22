@@ -30,7 +30,9 @@ impl MqttClient for rumqttc::AsyncClient {
     async fn publish(&self, topic: String, payload: String) {
         self.publish(topic, QoS::AtLeastOnce, false, payload)
             .await
-            .unwrap();
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to publish: {}", e);
+            });
     }
 }
 
@@ -75,8 +77,8 @@ impl<T: MqttClient> Device<T> {
 
     pub fn run(&mut self) {
         loop {
-            // TODO There's probably a better way to both send the stuff and wait for a while for a message.
             block_on(self.work());
+            // I thought I could nap, but I probably shouldn't ... I seem to be blocking the MQTT client event loop despite being in another thread.
             if self.nap_or_stop() {
                 break;
             }

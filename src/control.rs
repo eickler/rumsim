@@ -29,6 +29,7 @@ impl Control {
     }
 
     // TODO: Could this be done just with async await instead of threads?
+    // Since we anyway run the same wait time for all devices?
     fn start(&mut self, start_param: &StartParam) {
         self.stop();
 
