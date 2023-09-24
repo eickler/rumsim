@@ -3,12 +3,8 @@ use rand::rngs::StdRng;
 use rumqttc::QoS;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(test))]
-use log::debug;
 #[cfg(test)]
 use mockall::automock;
-#[cfg(test)]
-use std::println as debug;
 
 use crate::generator::{create_generator, Generator, GeneratorType};
 
@@ -30,14 +26,16 @@ impl MqttClient for rumqttc::AsyncClient {
 }
 
 // TODO Maybe rebuild this simply as wrapper? Somehow I cannot get this to work.
-pub struct Device<T> {
+pub struct Device {
     name: String,
     generators: Vec<Box<dyn Generator>>,
 }
 
-impl<T: MqttClient> Device<T> {
+impl Device {
     pub fn new(cluster_id: u16, device_id: u16, data_points: u16) -> Self {
         let mut name = String::from("/device_");
+        name.push_str(&cluster_id.to_string());
+        name.push_str("_");
         name.push_str(&device_id.to_string());
         name.push_str("/");
 
@@ -46,7 +44,7 @@ impl<T: MqttClient> Device<T> {
         Device { name, generators }
     }
 
-    pub async fn run(&mut self, mqtt: T, rng: &StdRng) {
+    pub async fn run<T: MqttClient>(&mut self, mqtt: &T, rng: &mut StdRng) {
         let mut futures = Vec::new();
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -64,7 +62,7 @@ impl<T: MqttClient> Device<T> {
             data.push_str(",");
             data.push_str(&value.to_string());
 
-            let f = self.mqtt.publish(topic, data);
+            let f = mqtt.publish(topic, data);
             futures.push(f);
         }
         futures::future::join_all(futures).await;

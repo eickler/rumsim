@@ -23,21 +23,21 @@ lazy_static! {
 async fn main() {
     env_logger::init();
 
-    let (client, eventloop) = create_mqtt_client().await;
+    let (client, mut eventloop) = create_mqtt_client().await;
     let mut simulation = Simulation::new();
 
     loop {
         let interval = simulation.interval();
         let start = Instant::now();
-        simulation.run(&client);
+        simulation.run(&client).await;
         let wait_time = interval - start.elapsed();
 
         match timeout(wait_time, eventloop.poll()).await {
             Ok(message) => {
-                try_configure(&simulation, message);
+                try_configure(&mut simulation, message);
             }
-            Elapsed => {
-                // Just continue to loop.
+            _ => {
+                // Just continue to loop on Elapsed.
             }
         }
     }
@@ -63,7 +63,7 @@ async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
 }
 
 /// Configure the simulation based on configuration commands sent to this client.
-fn try_configure(simulation: &Simulation, message: Result<Event, ConnectionError>) {
+fn try_configure(simulation: &mut Simulation, message: Result<Event, ConnectionError>) {
     match message {
         Ok(Event::Incoming(Packet::Publish(msg))) => {
             info!("Received incoming publish {:?}", msg);

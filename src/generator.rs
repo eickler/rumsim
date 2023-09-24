@@ -11,7 +11,7 @@ pub enum GeneratorType {
 
 /// Generate the next numerical value for a data point.
 pub trait Generator {
-    fn generate(&mut self, rng: &StdRng) -> (&str, f64);
+    fn generate(&mut self, rng: &mut StdRng) -> (&str, f64);
 }
 
 /// Factory method for creating a new generator.
@@ -33,13 +33,13 @@ struct NoiseGenerator {
 impl NoiseGenerator {
     fn new(id: u16) -> Self {
         let mut name = String::from("noise_");
-        name.push(id.to_string());
+        name.push_str(&id.to_string());
         NoiseGenerator { name }
     }
 }
 
 impl Generator for NoiseGenerator {
-    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
+    fn generate(&mut self, rng: &mut StdRng) -> (&str, f64) {
         let value: u16 = rng.gen();
         (&self.name, value.into())
     }
@@ -54,9 +54,9 @@ struct SensorGenerator {
 }
 
 impl SensorGenerator {
-    fn new(seed: u64) -> Self {
-        let seed_str = seed.to_string();
-        let name = "sensor_".to_owned() + &seed_str;
+    fn new(id: u16) -> Self {
+        let mut name = String::from("sensor_");
+        name.push_str(&id.to_string());
         SensorGenerator { name, index: 0 }
     }
 }
@@ -74,7 +74,7 @@ const JITTER: f64 = 2.0;
 const SPREAD: u32 = 100;
 
 impl Generator for SensorGenerator {
-    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
+    fn generate(&mut self, rng: &mut StdRng) -> (&str, f64) {
         let x: f64 = 2.0 * PI * f64::from(self.index) / f64::from(SPREAD);
         let plain_value = x.sin() * DELTA_TEMPERATURE + AVG_TEMPERATURE;
         let jitter_value: f64 = JITTER * 2.0 * rng.gen::<f64>() - JITTER + plain_value;
@@ -98,9 +98,9 @@ struct StatusGenerator {
 }
 
 impl StatusGenerator {
-    fn new(seed: u64) -> Self {
-        let seed_str = seed.to_string();
-        let name = "status_".to_owned() + &seed_str;
+    fn new(id: u16) -> Self {
+        let mut name = String::from("status_");
+        name.push_str(&id.to_string());
         StatusGenerator {
             name,
             index: 0,
@@ -113,7 +113,7 @@ impl StatusGenerator {
 const SUSTAIN: u16 = 100;
 
 impl Generator for StatusGenerator {
-    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
+    fn generate(&mut self, rng: &mut StdRng) -> (&str, f64) {
         if self.index == SUSTAIN {
             self.index = 0;
             self.current_value = rng.gen()
@@ -126,25 +126,27 @@ impl Generator for StatusGenerator {
 
 #[cfg(test)]
 mod tests {
+    use rand::SeedableRng;
+
     use super::*;
 
     #[test]
     fn test_noise_generator() {
         let mut gen = NoiseGenerator::new(1);
-        let (_name, value) = gen.generate(StdRng::from_entropy());
+        let (_name, value) = gen.generate(&mut StdRng::from_entropy());
         assert!((0.0..u16::MAX as f64).contains(&value));
     }
 
     #[test]
     fn test_sensor_generator() {
-        let rng = StdRng::from_entropy();
+        let mut rng = StdRng::from_entropy();
         let mut gen = SensorGenerator::new(1);
-        let (mut _name, mut value) = gen.generate(rng);
+        let (mut _name, mut value) = gen.generate(&mut rng);
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
 
         for _i in 0..SPREAD - 1 {
-            (_name, value) = gen.generate(rng);
+            (_name, value) = gen.generate(&mut rng);
         }
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
@@ -152,28 +154,28 @@ mod tests {
 
     #[test]
     fn test_status_generator() {
-        let rng = StdRng::from_entropy();
+        let mut rng = StdRng::from_entropy();
         let mut gen = StatusGenerator::new(1);
-        let (_name, start_value) = gen.generate(rng);
+        let (_name, start_value) = gen.generate(&mut rng);
 
         for _i in 0..SUSTAIN - 1 {
-            let (_name, value) = gen.generate(rng);
+            let (_name, value) = gen.generate(&mut rng);
             assert_eq!(start_value, value);
         }
 
-        let (_name, next_value) = gen.generate(rng);
+        let (_name, next_value) = gen.generate(&mut rng);
         assert_ne!(start_value, next_value);
     }
 
     #[test]
     fn test_factory() {
-        let rng = StdRng::from_entropy();
+        let mut rng = StdRng::from_entropy();
         // TODO: Can I test the type that is returned by the factory?
         let mut noise = create_generator(GeneratorType::Noise, 1);
-        noise.generate(rng);
+        noise.generate(&mut rng);
         let mut sensor = create_generator(GeneratorType::Sensor, 1);
-        sensor.generate(rng);
+        sensor.generate(&mut rng);
         let mut status = create_generator(GeneratorType::Status, 1);
-        status.generate(rng);
+        status.generate(&mut rng);
     }
 }

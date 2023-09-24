@@ -1,4 +1,4 @@
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct SimulationParameters {
     pub devices: u16,
     pub data_points: u16,

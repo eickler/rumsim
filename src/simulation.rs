@@ -8,7 +8,7 @@ use rumqttc::AsyncClient;
 
 pub struct Simulation {
     param: SimulationParameters,
-    devices: Vec<Device<AsyncClient>>,
+    devices: Vec<Device>,
     rng: StdRng,
 }
 
@@ -41,14 +41,14 @@ impl Simulation {
         }
     }
 
-    pub fn run(&mut self, client: &AsyncClient) {
+    pub async fn run(&mut self, client: &AsyncClient) {
         for device in self.devices.iter_mut() {
-            device.run(client, &self.rng);
+            device.run(client, &mut self.rng).await;
         }
     }
 
     fn start(&mut self, start_param: &SimulationParameters) {
-        self.param = *start_param.clone();
+        self.param = start_param.clone();
         self.devices.clear();
         self.devices = Vec::with_capacity(self.param.devices.into());
         self.rng = StdRng::seed_from_u64(self.param.seed.into());
