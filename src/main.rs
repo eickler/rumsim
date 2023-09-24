@@ -2,66 +2,84 @@
 extern crate lazy_static;
 extern crate log;
 
-use rumqttc::Event::Incoming;
-use rumqttc::Packet::Publish;
-use rumqttc::{AsyncClient, ConnectionError, MqttOptions, QoS};
-
-use std::time::Duration;
+use log::{debug, info};
+use rumqttc::{AsyncClient, ConnectionError, Event, EventLoop, MqttOptions, Packet, QoS};
+use simulation::Simulation;
+use tokio::time::{timeout, Duration, Instant};
 
 mod commands;
-mod control;
 mod device;
 mod generator;
 mod settings;
+mod simulation;
 
 lazy_static! {
     static ref CONFIG: settings::Settings =
         settings::Settings::new().expect("Configuration cannot be loaded.");
 }
 
+/// Main loop of receiving commands to control the simulation and running the simulation itself.
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    /*
-     * Client starts and starts listening for commands on a "control plane" broker.
-     * Receives start command with amount of devices, amount of data points and milliseconds wait.
-     * Start stops everything running and start per device a thread with a wait of milliseconds/devices ms.
-     * Threads produce every wait interval the amount of data points for their device.
-     */
+    let (client, eventloop) = create_mqtt_client().await;
+    let mut simulation = Simulation::new();
 
+    loop {
+        let interval = simulation.interval();
+        let start = Instant::now();
+        simulation.run(&client);
+        let wait_time = interval - start.elapsed();
+
+        match timeout(wait_time, eventloop.poll()).await {
+            Ok(message) => {
+                try_configure(&simulation, message);
+            }
+            Elapsed => {
+                // Just continue to loop.
+            }
+        }
+    }
+}
+
+/// Create the MQTT connection based on the configuration.
+async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
     let config = &CONFIG.control;
-    let url = config.url.clone() + "?client_id=123";
+    let mut url = config.url.clone();
+    url.push_str("?");
+    url.push_str(&config.client_id);
     let mut opts = MqttOptions::parse_url(url).unwrap();
     opts.set_credentials(&config.user, &config.pass);
     opts.set_keep_alive(Duration::from_secs(5));
 
-    let (client, mut eventloop) = AsyncClient::new(opts, 10);
+    let (client, eventloop) = AsyncClient::new(opts, config.capacity);
     client
-        .subscribe(&config.topic, QoS::AtMostOnce)
+        .subscribe(&config.control_topic, QoS::AtMostOnce)
         .await
-        .unwrap();
+        .unwrap(); // It's OK if this panics when there's no connection.
 
-    let mut control = control::Control::new(&CONFIG.target);
+    (client, eventloop)
+}
 
-    loop {
-        match eventloop.poll().await {
-            Ok(Incoming(Publish(msg))) => {
-                println!("Received incoming publish {:?}", msg);
-                if let Ok(command_str) = String::from_utf8(msg.payload.to_vec()) {
-                    let command = commands::parse(&command_str);
-                    match command {
-                        Ok(cmd) => control.run(&cmd),
-                        _ => println!("Invalid command: {}", command_str),
-                    }
+/// Configure the simulation based on configuration commands sent to this client.
+fn try_configure(simulation: &Simulation, message: Result<Event, ConnectionError>) {
+    match message {
+        Ok(Event::Incoming(Packet::Publish(msg))) => {
+            info!("Received incoming publish {:?}", msg);
+            if let Ok(command_str) = String::from_utf8(msg.payload.to_vec()) {
+                let command = commands::parse(&command_str);
+                match command {
+                    Ok(cmd) => simulation.configure(&cmd),
+                    _ => println!("Invalid command: {}", command_str),
                 }
             }
-            Ok(x) => {
-                println!("Received = {:?}", x);
-            }
-            Err(e) => {
-                eprintln!("Failed to connect: {}", e);
-            }
+        }
+        Ok(x) => {
+            debug!("Received = {:?}", x);
+        }
+        Err(e) => {
+            eprintln!("Failed to connect: {}", e);
         }
     }
 }

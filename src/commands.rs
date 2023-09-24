@@ -1,13 +1,14 @@
 #[derive(PartialEq, Debug)]
-pub struct StartParam {
+pub struct SimulationParameters {
     pub devices: u16,
     pub data_points: u16,
     pub wait_time_secs: u16,
+    pub seed: u16,
 }
 
 #[derive(PartialEq, Debug)]
 pub enum Command {
-    Start(StartParam),
+    Start(SimulationParameters),
     Stop,
 }
 
@@ -19,7 +20,7 @@ pub enum CommandErr {
 }
 
 fn parse_start(parts: &Vec<&str>) -> Result<Command, CommandErr> {
-    if parts.len() != 4 {
+    if parts.len() != 4 && parts.len() != 5 {
         return Err(CommandErr::InvalidArguments);
     }
     let devices = parts[1]
@@ -28,13 +29,20 @@ fn parse_start(parts: &Vec<&str>) -> Result<Command, CommandErr> {
     let data_points = parts[2]
         .parse::<u16>()
         .map_err(|_| CommandErr::InvalidArguments)?;
-    let wait_time = parts[3]
+    let wait_time_secs = parts[3]
         .parse::<u16>()
         .map_err(|_| CommandErr::InvalidArguments)?;
-    Ok(Command::Start(StartParam {
+    let mut seed: u16 = 1;
+    if parts.len() == 5 {
+        seed = parts[4]
+            .parse::<u16>()
+            .map_err(|_| CommandErr::InvalidArguments)?;
+    }
+    Ok(Command::Start(SimulationParameters {
         devices,
         data_points,
-        wait_time_secs: wait_time,
+        wait_time_secs,
+        seed,
     }))
 }
 
@@ -66,10 +74,11 @@ mod tests {
     fn start_command() {
         {
             let command = "start 10 20 30".to_string();
-            let reference = Ok(Command::Start(StartParam {
+            let reference = Ok(Command::Start(SimulationParameters {
                 devices: 10,
                 data_points: 20,
                 wait_time_secs: 30,
+                seed: 1,
             }));
             assert_eq!(reference, parse(&command));
         }

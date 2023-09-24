@@ -1,5 +1,5 @@
 //! Generate numerical data to simulate IoT device data points.
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, Rng};
 use std::f64::consts::PI;
 
 /// The currently available types of generators for data points.
@@ -11,15 +11,15 @@ pub enum GeneratorType {
 
 /// Generate the next numerical value for a data point.
 pub trait Generator {
-    fn generate(&mut self) -> (&str, f64);
+    fn generate(&mut self, rng: &StdRng) -> (&str, f64);
 }
 
 /// Factory method for creating a new generator.
-pub fn create_generator(generator_type: GeneratorType, seed: u64) -> Box<dyn Generator> {
+pub fn create_generator(generator_type: GeneratorType, id: u16) -> Box<dyn Generator> {
     match generator_type {
-        GeneratorType::Noise => Box::new(NoiseGenerator::new(seed)),
-        GeneratorType::Sensor => Box::new(SensorGenerator::new(seed)),
-        GeneratorType::Status => Box::new(StatusGenerator::new(seed)),
+        GeneratorType::Noise => Box::new(NoiseGenerator::new(id)),
+        GeneratorType::Sensor => Box::new(SensorGenerator::new(id)),
+        GeneratorType::Status => Box::new(StatusGenerator::new(id)),
     }
 }
 
@@ -28,23 +28,19 @@ pub fn create_generator(generator_type: GeneratorType, seed: u64) -> Box<dyn Gen
 /// rapidly changing values reflecting a production process.
 struct NoiseGenerator {
     name: String,
-    rng: StdRng,
 }
 
 impl NoiseGenerator {
-    fn new(seed: u64) -> Self {
-        let seed_str = seed.to_string();
-        let name = "noise_".to_owned() + &seed_str;
-        NoiseGenerator {
-            name,
-            rng: StdRng::seed_from_u64(seed),
-        }
+    fn new(id: u16) -> Self {
+        let mut name = String::from("noise_");
+        name.push(id.to_string());
+        NoiseGenerator { name }
     }
 }
 
 impl Generator for NoiseGenerator {
-    fn generate(&mut self) -> (&str, f64) {
-        let value: u16 = self.rng.gen();
+    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
+        let value: u16 = rng.gen();
         (&self.name, value.into())
     }
 }
@@ -54,7 +50,6 @@ impl Generator for NoiseGenerator {
 /// and has an additional jitter applied on top.
 struct SensorGenerator {
     name: String,
-    rng: StdRng,
     index: u32,
 }
 
@@ -62,11 +57,7 @@ impl SensorGenerator {
     fn new(seed: u64) -> Self {
         let seed_str = seed.to_string();
         let name = "sensor_".to_owned() + &seed_str;
-        SensorGenerator {
-            name,
-            rng: StdRng::seed_from_u64(seed),
-            index: 0,
-        }
+        SensorGenerator { name, index: 0 }
     }
 }
 
@@ -83,10 +74,10 @@ const JITTER: f64 = 2.0;
 const SPREAD: u32 = 100;
 
 impl Generator for SensorGenerator {
-    fn generate(&mut self) -> (&str, f64) {
+    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
         let x: f64 = 2.0 * PI * f64::from(self.index) / f64::from(SPREAD);
         let plain_value = x.sin() * DELTA_TEMPERATURE + AVG_TEMPERATURE;
-        let jitter_value: f64 = JITTER * 2.0 * self.rng.gen::<f64>() - JITTER + plain_value;
+        let jitter_value: f64 = JITTER * 2.0 * rng.gen::<f64>() - JITTER + plain_value;
         let rounded_value = (jitter_value * 100.0).trunc() / 100.0;
         if self.index == SPREAD {
             self.index = 0;
@@ -102,7 +93,6 @@ impl Generator for SensorGenerator {
 /// alarm condition or a reconfiguration.
 struct StatusGenerator {
     name: String,
-    rng: StdRng,
     index: u16,
     current_value: u16,
 }
@@ -113,7 +103,6 @@ impl StatusGenerator {
         let name = "status_".to_owned() + &seed_str;
         StatusGenerator {
             name,
-            rng: StdRng::seed_from_u64(seed),
             index: 0,
             current_value: 0,
         }
@@ -124,10 +113,10 @@ impl StatusGenerator {
 const SUSTAIN: u16 = 100;
 
 impl Generator for StatusGenerator {
-    fn generate(&mut self) -> (&str, f64) {
+    fn generate(&mut self, rng: &StdRng) -> (&str, f64) {
         if self.index == SUSTAIN {
             self.index = 0;
-            self.current_value = self.rng.gen()
+            self.current_value = rng.gen()
         } else {
             self.index += 1;
         }
@@ -142,19 +131,20 @@ mod tests {
     #[test]
     fn test_noise_generator() {
         let mut gen = NoiseGenerator::new(1);
-        let (_name, value) = gen.generate();
+        let (_name, value) = gen.generate(StdRng::from_entropy());
         assert!((0.0..u16::MAX as f64).contains(&value));
     }
 
     #[test]
     fn test_sensor_generator() {
+        let rng = StdRng::from_entropy();
         let mut gen = SensorGenerator::new(1);
-        let (mut _name, mut value) = gen.generate();
+        let (mut _name, mut value) = gen.generate(rng);
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
 
         for _i in 0..SPREAD - 1 {
-            (_name, value) = gen.generate();
+            (_name, value) = gen.generate(rng);
         }
 
         assert!((AVG_TEMPERATURE - JITTER..AVG_TEMPERATURE + JITTER).contains(&value));
@@ -162,26 +152,28 @@ mod tests {
 
     #[test]
     fn test_status_generator() {
+        let rng = StdRng::from_entropy();
         let mut gen = StatusGenerator::new(1);
-        let (_name, start_value) = gen.generate();
+        let (_name, start_value) = gen.generate(rng);
 
         for _i in 0..SUSTAIN - 1 {
-            let (_name, value) = gen.generate();
+            let (_name, value) = gen.generate(rng);
             assert_eq!(start_value, value);
         }
 
-        let (_name, next_value) = gen.generate(); // With a fixed seed, we can avoid the 1/65536 chance that the same value is generated.
+        let (_name, next_value) = gen.generate(rng);
         assert_ne!(start_value, next_value);
     }
 
     #[test]
     fn test_factory() {
+        let rng = StdRng::from_entropy();
         // TODO: Can I test the type that is returned by the factory?
         let mut noise = create_generator(GeneratorType::Noise, 1);
-        noise.generate();
+        noise.generate(rng);
         let mut sensor = create_generator(GeneratorType::Sensor, 1);
-        sensor.generate();
+        sensor.generate(rng);
         let mut status = create_generator(GeneratorType::Status, 1);
-        status.generate();
+        status.generate(rng);
     }
 }
