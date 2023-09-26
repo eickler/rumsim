@@ -32,8 +32,7 @@ struct NoiseGenerator {
 
 impl NoiseGenerator {
     fn new(id: u16) -> Self {
-        let mut name = String::from("noise_");
-        name.push_str(&id.to_string());
+        let name = format!("noise_{}", id);
         NoiseGenerator { name }
     }
 }
@@ -55,8 +54,7 @@ struct SensorGenerator {
 
 impl SensorGenerator {
     fn new(id: u16) -> Self {
-        let mut name = String::from("sensor_");
-        name.push_str(&id.to_string());
+        let name = format!("sensor_{}", id);
         SensorGenerator { name, index: 0 }
     }
 }
@@ -99,8 +97,7 @@ struct StatusGenerator {
 
 impl StatusGenerator {
     fn new(id: u16) -> Self {
-        let mut name = String::from("status_");
-        name.push_str(&id.to_string());
+        let name = format!("status_{}", id);
         StatusGenerator {
             name,
             index: 0,
@@ -133,13 +130,13 @@ mod tests {
     #[test]
     fn test_noise_generator() {
         let mut gen = NoiseGenerator::new(1);
-        let (_name, value) = gen.generate(&mut StdRng::from_entropy());
+        let (_name, value) = gen.generate(&mut StdRng::seed_from_u64(1));
         assert!((0.0..u16::MAX as f64).contains(&value));
     }
 
     #[test]
     fn test_sensor_generator() {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = StdRng::seed_from_u64(1);
         let mut gen = SensorGenerator::new(1);
         let (mut _name, mut value) = gen.generate(&mut rng);
 
@@ -154,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_status_generator() {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = StdRng::seed_from_u64(1);
         let mut gen = StatusGenerator::new(1);
         let (_name, start_value) = gen.generate(&mut rng);
 
@@ -169,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_factory() {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = StdRng::seed_from_u64(1);
         // TODO: Can I test the type that is returned by the factory?
         let mut noise = create_generator(GeneratorType::Noise, 1);
         noise.generate(&mut rng);

@@ -46,10 +46,9 @@ async fn main() {
 /// Create the MQTT connection based on the configuration.
 async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
     let config = &CONFIG.control;
-    let mut url = config.url.clone();
-    url.push_str("?");
-    url.push_str(&config.client_id);
+    let url = format!("{}?client_id={}", config.url, config.client_id);
     let mut opts = MqttOptions::parse_url(url).unwrap();
+
     opts.set_credentials(&config.user, &config.pass);
     opts.set_keep_alive(Duration::from_secs(5));
 

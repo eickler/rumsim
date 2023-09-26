@@ -23,8 +23,8 @@ brew install nats-io/nats-tools/nats
 Start the simulated devices:
 
 ```
-nats --user=mqtt --password=pass pub control "start <devices> <data points> <wait time in secs>"
-nats --user=mqtt --password=pass pub control "start 2 2 5"
+nats --user=mqtt --password=pass pub control "start <devices> <data points> <wait time in secs> <seed>"
+nats --user=mqtt --password=pass pub control "start 2 2 5 1"
 ```
 
 You can send a start command at any time to change the simulated devices. Stop the simulated devices:
