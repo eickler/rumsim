@@ -32,3 +32,10 @@ You can send a start command at any time to change the simulated devices. Stop t
 ```
 nats --user=mqtt --password=pass pub control "stop"
 ```
+
+## Message format
+
+Topic: /device\_{cluster ID}\_{device ID}/{data point name}
+Format time,value
+
+Cluster ID distinguishes devices from several running simulators.

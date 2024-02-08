@@ -31,12 +31,15 @@ pub struct Device {
 }
 
 impl Device {
+    /// Create a new device with the given cluster and device IDs and the number of data points.
+    /// Cluster ID serves as a prefix for the device name to distinguish several simulators from each other.
     pub fn new(cluster_id: u16, device_id: u16, data_points: u16) -> Self {
         let name = format!("/device_{}_{}/", cluster_id, device_id);
         let generators = Self::create_data_point_generators(data_points);
         Device { name, generators }
     }
 
+    /// Push the generated data points to the MQTT broker and await completion.
     pub async fn run<T: MqttClient>(&mut self, mqtt: &T, rng: &mut StdRng) {
         let mut futures = Vec::new();
         let time = SystemTime::now()
@@ -50,12 +53,17 @@ impl Device {
 
             let topic = format!("{}{}", self.name, name);
             let data = format!("{},{}", time, value);
+            // This crashes on high load because I am pushing too much into the queue without fetching the replies.
+            // I need to poll for incoming messages during the run.
+            // Maybe the entire thing should just prepare the data and then return a list of messages to be sent? Or an iterator to be not that memory intensive?
             let f = mqtt.publish(topic, data);
             futures.push(f);
         }
+
         futures::future::join_all(futures).await;
     }
 
+    /// Each device produces roughly 1/3 of each type of data point, status, noise, and sensor data.
     fn create_data_point_generators(data_points: u16) -> Vec<Box<dyn Generator>> {
         let mut generators = Vec::with_capacity(data_points.into());
 

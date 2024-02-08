@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::commands::{Command, SimulationParameters};
 use crate::device::Device;
+use log::info;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rumqttc::AsyncClient;
@@ -47,8 +48,12 @@ impl Simulation {
         }
     }
 
-    fn start(&mut self, start_param: &SimulationParameters) {
-        self.param = start_param.clone();
+    fn start(&mut self, param: &SimulationParameters) {
+        info!(
+            "Starting simulation: {} devices, {} data points, {} wait time, {} seed",
+            param.devices, param.data_points, param.wait_time_secs, param.seed
+        );
+        self.param = param.clone();
         self.devices.clear();
         self.devices = Vec::with_capacity(self.param.devices.into());
         self.rng = StdRng::seed_from_u64(self.param.seed.into());
@@ -60,6 +65,7 @@ impl Simulation {
     }
 
     pub fn stop(&mut self) {
+        info!("Stopping simulation.");
         self.param = Self::init_params();
         self.devices.clear();
         self.devices = Vec::with_capacity(0);

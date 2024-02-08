@@ -2,7 +2,7 @@
 extern crate lazy_static;
 extern crate log;
 
-use log::{debug, info};
+use log::{debug, info, warn};
 use rumqttc::{AsyncClient, ConnectionError, Event, EventLoop, MqttOptions, Packet, QoS};
 use simulation::Simulation;
 use tokio::time::{timeout, Duration, Instant};
@@ -18,7 +18,7 @@ lazy_static! {
         settings::Settings::new().expect("Configuration cannot be loaded.");
 }
 
-/// Main loop of receiving commands to control the simulation and running the simulation itself.
+/// Main loop of running the simulation and receiving commands to control the simulation through MQTT.
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -27,17 +27,37 @@ async fn main() {
     let mut simulation = Simulation::new();
 
     loop {
-        let interval = simulation.interval();
-        let start = Instant::now();
-        simulation.run(&client).await;
-        let wait_time = interval - start.elapsed();
+        let wait_time = simulate(&mut simulation, &client).await;
+        wait_for_command(wait_time, &mut eventloop, &mut simulation).await;
+    }
+}
 
+/// Run the simulation and return the remaining time to wait until the next simulation cycle.
+async fn simulate(simulation: &mut Simulation, client: &AsyncClient) -> Duration {
+    let wait_time = simulation.interval();
+    let start = Instant::now();
+    simulation.run(&client).await;
+    wait_time.saturating_sub(start.elapsed())
+}
+
+/// Wait until the next simulation cycle, potentially receiving commands to control the simulation meanwhile.
+async fn wait_for_command(
+    wait_time: Duration,
+    eventloop: &mut EventLoop,
+    simulation: &mut Simulation,
+) {
+    let mut wait_time = wait_time.clone();
+    loop {
+        let start = Instant::now();
+        debug!("Wait time {:#?}", wait_time);
         match timeout(wait_time, eventloop.poll()).await {
             Ok(message) => {
-                try_configure(&mut simulation, message);
+                try_configure(simulation, message);
+                wait_time = wait_time.saturating_sub(start.elapsed());
             }
             _ => {
-                // Just continue to loop on Elapsed.
+                debug!("Wait time elapsed");
+                return;
             }
         }
     }
@@ -73,6 +93,10 @@ fn try_configure(simulation: &mut Simulation, message: Result<Event, ConnectionE
                     _ => println!("Invalid command: {}", command_str),
                 }
             }
+        }
+        Ok(Event::Incoming(Packet::Disconnect)) => {
+            // TODO: If there is an error here, I probably need to rescubscribe to the command channel.
+            warn!("Disconnected from the broker");
         }
         Ok(x) => {
             debug!("Received = {:?}", x);
