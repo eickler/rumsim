@@ -81,6 +81,7 @@ fn handle_cmd(
 }
 
 async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<SimulationParameters>) {
+    let qos = get_qos();
     let mut simulation = Simulation::new();
     let mut params = SimulationParameters::default();
     let mut remainder = params.wait_time.clone();
@@ -100,7 +101,7 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
         let start = Instant::now();
         info!("Running simulation for {:?}", params);
         for (topic, data) in simulation.iter() {
-            match client.publish(topic, QoS::AtLeastOnce, false, data).await {
+            match client.publish(topic, qos, false, data).await {
                 Ok(_) => (),
                 Err(e) => {
                     warn!("Failed to publish: {}", e);
@@ -113,6 +114,15 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
         if remainder == Duration::ZERO {
             warn!("Messages cannot be sent fast enough. Increase capacity on receiving end, increase wait time or reduce the number of data points.");
         }
+    }
+}
+
+fn get_qos() -> QoS {
+    match CONFIG.control.qos {
+        0 => QoS::AtMostOnce,
+        1 => QoS::AtLeastOnce,
+        2 => QoS::ExactlyOnce,
+        _ => panic!("Invalid QoS level."),
     }
 }
 

@@ -11,6 +11,7 @@ pub struct Control {
     pub control_topic: String,
     pub client_id: String,
     pub capacity: usize,
+    pub qos: u8,
 }
 
 #[derive(Debug, Deserialize, Clone)]
