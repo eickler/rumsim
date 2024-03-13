@@ -18,7 +18,7 @@ impl Default for SimulationParameters {
         SimulationParameters {
             devices: 0,
             data_points: 0,
-            wait_time: Duration::from_secs(5),
+            wait_time: Duration::MAX,
             seed: 0,
         }
     }
