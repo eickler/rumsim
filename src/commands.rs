@@ -1,10 +1,6 @@
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct SimulationParameters {
-    pub devices: u16,
-    pub data_points: u16,
-    pub wait_time_secs: u16,
-    pub seed: u16,
-}
+use std::time::Duration;
+
+use crate::simulation::SimulationParameters;
 
 #[derive(PartialEq, Debug)]
 pub enum Command {
@@ -24,24 +20,24 @@ fn parse_start(parts: &Vec<&str>) -> Result<Command, CommandErr> {
         return Err(CommandErr::InvalidArguments);
     }
     let devices = parts[1]
-        .parse::<u16>()
+        .parse::<usize>()
         .map_err(|_| CommandErr::InvalidArguments)?;
     let data_points = parts[2]
-        .parse::<u16>()
+        .parse::<usize>()
         .map_err(|_| CommandErr::InvalidArguments)?;
     let wait_time_secs = parts[3]
         .parse::<u16>()
         .map_err(|_| CommandErr::InvalidArguments)?;
-    let mut seed: u16 = 1;
+    let mut seed: u64 = 1;
     if parts.len() == 5 {
         seed = parts[4]
-            .parse::<u16>()
+            .parse::<u64>()
             .map_err(|_| CommandErr::InvalidArguments)?;
     }
     Ok(Command::Start(SimulationParameters {
         devices,
         data_points,
-        wait_time_secs,
+        wait_time: Duration::from_secs(wait_time_secs as u64),
         seed,
     }))
 }
@@ -77,7 +73,7 @@ mod tests {
             let reference = Ok(Command::Start(SimulationParameters {
                 devices: 10,
                 data_points: 20,
-                wait_time_secs: 30,
+                wait_time: Duration::from_secs(30),
                 seed: 1,
             }));
             assert_eq!(reference, parse(&command));

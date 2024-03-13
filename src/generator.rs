@@ -10,12 +10,12 @@ pub enum GeneratorType {
 }
 
 /// Generate the next numerical value for a data point.
-pub trait Generator {
+pub trait Generator: Send {
     fn generate(&mut self, rng: &mut StdRng) -> (&str, f64);
 }
 
 /// Factory method for creating a new generator.
-pub fn create_generator(generator_type: GeneratorType, id: u16) -> Box<dyn Generator> {
+pub fn create_generator(generator_type: GeneratorType, id: usize) -> Box<dyn Generator> {
     match generator_type {
         GeneratorType::Noise => Box::new(NoiseGenerator::new(id)),
         GeneratorType::Sensor => Box::new(SensorGenerator::new(id)),
@@ -31,7 +31,7 @@ struct NoiseGenerator {
 }
 
 impl NoiseGenerator {
-    fn new(id: u16) -> Self {
+    fn new(id: usize) -> Self {
         let name = format!("noise_{}", id);
         NoiseGenerator { name }
     }
@@ -53,7 +53,7 @@ struct SensorGenerator {
 }
 
 impl SensorGenerator {
-    fn new(id: u16) -> Self {
+    fn new(id: usize) -> Self {
         let name = format!("sensor_{}", id);
         SensorGenerator { name, index: 0 }
     }
@@ -96,7 +96,7 @@ struct StatusGenerator {
 }
 
 impl StatusGenerator {
-    fn new(id: u16) -> Self {
+    fn new(id: usize) -> Self {
         let name = format!("status_{}", id);
         StatusGenerator {
             name,

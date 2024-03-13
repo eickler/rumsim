@@ -2,10 +2,12 @@
 extern crate lazy_static;
 extern crate log;
 
+use crate::commands::Command::{Start, Stop};
 use log::{debug, info, warn};
-use rumqttc::{AsyncClient, ConnectionError, Event, EventLoop, MqttOptions, Packet, QoS};
-use simulation::Simulation;
-use tokio::time::{timeout, Duration, Instant};
+use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
+use simulation::{Simulation, SimulationParameters};
+use tokio::sync::watch;
+use tokio::time::{Duration, Instant};
 
 mod commands;
 mod device;
@@ -22,44 +24,82 @@ lazy_static! {
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
-    let (client, mut eventloop) = create_mqtt_client().await;
-    let mut simulation = Simulation::new();
-
-    loop {
-        let wait_time = simulate(&mut simulation, &client).await;
-        wait_for_command(wait_time, &mut eventloop, &mut simulation).await;
-    }
+    let (client, eventloop) = create_mqtt_client().await;
+    let (params_tx, params_rx) = watch::channel(SimulationParameters::default());
+    let simulation_handle = tokio::spawn(async move { simulate(client, params_rx).await });
+    let command_handle = tokio::spawn(async move { listen(eventloop, params_tx).await });
+    futures::future::select(simulation_handle, command_handle).await;
+    // TODO: Handle the situation when there is a connection error somewhere. The simulation should try to reconnect and continue with the same simulation parameters, but that it would need to preserve the parameters.
 }
 
-/// Run the simulation and return the remaining time to wait until the next simulation cycle.
-async fn simulate(simulation: &mut Simulation, client: &AsyncClient) -> Duration {
-    let wait_time = simulation.interval();
-    let start = Instant::now();
-    simulation.run(&client).await;
-    wait_time.saturating_sub(start.elapsed())
-}
-
-/// Wait until the next simulation cycle, potentially receiving commands to control the simulation meanwhile.
-async fn wait_for_command(
-    wait_time: Duration,
-    eventloop: &mut EventLoop,
-    simulation: &mut Simulation,
-) {
-    let mut wait_time = wait_time.clone();
+async fn listen(mut eventloop: EventLoop, params_tx: watch::Sender<SimulationParameters>) {
     loop {
-        let start = Instant::now();
-        debug!("Wait time {:#?}", wait_time);
-        match timeout(wait_time, eventloop.poll()).await {
-            Ok(message) => {
-                try_configure(simulation, message);
-                wait_time = wait_time.saturating_sub(start.elapsed());
+        match eventloop.poll().await {
+            Ok(Event::Incoming(Packet::Publish(msg))) => {
+                info!("Received incoming publish: {:?}", msg);
+                if let Err(e) = handle_cmd(msg.payload.to_vec(), &params_tx) {
+                    warn!("Send error: {:?}", e);
+                    return;
+                }
             }
-            _ => {
-                debug!("Wait time elapsed");
+            Ok(Event::Incoming(Packet::Disconnect)) => {
+                warn!("Disconnected from the broker.");
+                return;
+            }
+            Ok(x) => {
+                debug!("Received: {:?}", x);
+            }
+            Err(e) => {
+                warn!("Failed to connect: {}", e);
                 return;
             }
         }
+    }
+}
+
+fn handle_cmd(
+    payload: Vec<u8>,
+    params_tx: &watch::Sender<SimulationParameters>,
+) -> Result<(), watch::error::SendError<SimulationParameters>> {
+    if let Ok(command_str) = String::from_utf8(payload) {
+        let command = commands::parse(&command_str);
+        return match command {
+            Ok(Start(new_params)) => params_tx.send(new_params),
+            Ok(Stop) => params_tx.send(SimulationParameters::default()),
+            _ => Ok({
+                println!("Invalid command: {}", command_str);
+                ()
+            }),
+        };
+    }
+    Ok(())
+}
+
+async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<SimulationParameters>) {
+    let mut simulation = Simulation::new();
+    let mut params = SimulationParameters::default();
+
+    loop {
+        if params_rx.changed().await.is_ok() {
+            params = params_rx.borrow_and_update().clone();
+            println!("Parameters changed: {:?}", params);
+            if params.devices > 0 {
+                simulation.start(params);
+            } else {
+                simulation.stop();
+            }
+        }
+
+        let start = Instant::now();
+        for (topic, data) in simulation.iter() {
+            // TODO: Error handling
+            client
+                .publish(topic, QoS::AtLeastOnce, false, data)
+                .await
+                .unwrap();
+        }
+        let remainder = params.wait_time.saturating_sub(start.elapsed());
+        tokio::time::sleep(remainder.max(Duration::from_secs(0))).await;
     }
 }
 
@@ -79,30 +119,4 @@ async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
         .unwrap(); // It's OK if this panics when there's no connection.
 
     (client, eventloop)
-}
-
-/// Configure the simulation based on configuration commands sent to this client.
-fn try_configure(simulation: &mut Simulation, message: Result<Event, ConnectionError>) {
-    match message {
-        Ok(Event::Incoming(Packet::Publish(msg))) => {
-            info!("Received incoming publish {:?}", msg);
-            if let Ok(command_str) = String::from_utf8(msg.payload.to_vec()) {
-                let command = commands::parse(&command_str);
-                match command {
-                    Ok(cmd) => simulation.configure(&cmd),
-                    _ => println!("Invalid command: {}", command_str),
-                }
-            }
-        }
-        Ok(Event::Incoming(Packet::Disconnect)) => {
-            // TODO: If there is an error here, I probably need to rescubscribe to the command channel.
-            warn!("Disconnected from the broker");
-        }
-        Ok(x) => {
-            debug!("Received = {:?}", x);
-        }
-        Err(e) => {
-            eprintln!("Failed to connect: {}", e);
-        }
-    }
 }
