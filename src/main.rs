@@ -29,7 +29,11 @@ async fn main() {
     let simulation_handle = tokio::spawn(async move { simulate(client, params_rx).await });
     let command_handle = tokio::spawn(async move { listen(eventloop, params_tx).await });
     futures::future::select(simulation_handle, command_handle).await;
-    // TODO: Handle the situation when there is a connection error somewhere. The simulation should try to reconnect and continue with the same simulation parameters, but that it would need to preserve the parameters.
+    /*
+        TODO: Handle the situation when there is a connection error somewhere.
+        The simulation should try to reconnect and continue with the same simulation parameters,
+        but for that it would need to preserve the parameters.
+    */
 }
 
 async fn listen(mut eventloop: EventLoop, params_tx: watch::Sender<SimulationParameters>) {
@@ -92,11 +96,13 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
 
         let start = Instant::now();
         for (topic, data) in simulation.iter() {
-            // TODO: Error handling
-            client
-                .publish(topic, QoS::AtLeastOnce, false, data)
-                .await
-                .unwrap();
+            match client.publish(topic, QoS::AtLeastOnce, false, data).await {
+                Ok(_) => (),
+                Err(e) => {
+                    warn!("Failed to publish: {}", e);
+                    return;
+                }
+            }
         }
         let remainder = params.wait_time.saturating_sub(start.elapsed());
         tokio::time::sleep(remainder.max(Duration::from_secs(0))).await;
