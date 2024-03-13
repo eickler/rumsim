@@ -3,7 +3,7 @@ extern crate lazy_static;
 extern crate log;
 
 use crate::commands::Command::{Start, Stop};
-use log::{debug, info, warn};
+use log::{info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use simulation::{Simulation, SimulationParameters};
 use tokio::sync::watch;
@@ -50,8 +50,8 @@ async fn listen(mut eventloop: EventLoop, params_tx: watch::Sender<SimulationPar
                 warn!("Disconnected from the broker.");
                 return;
             }
-            Ok(x) => {
-                debug!("Received: {:?}", x);
+            Ok(_) => {
+                //debug!("Received: {:?}", x);
             }
             Err(e) => {
                 warn!("Failed to connect: {}", e);
@@ -71,7 +71,7 @@ fn handle_cmd(
             Ok(Start(new_params)) => params_tx.send(new_params),
             Ok(Stop) => params_tx.send(SimulationParameters::default()),
             _ => Ok({
-                println!("Invalid command: {}", command_str);
+                warn!("Invalid command: {}", command_str);
                 ()
             }),
         };
@@ -84,17 +84,20 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
     let mut params = SimulationParameters::default();
 
     loop {
-        if params_rx.changed().await.is_ok() {
-            params = params_rx.borrow_and_update().clone();
-            println!("Parameters changed: {:?}", params);
-            if params.devices > 0 {
-                simulation.start(params);
-            } else {
-                simulation.stop();
+        if let Ok(changed) = params_rx.has_changed() {
+            if changed {
+                params = params_rx.borrow_and_update().clone();
+                info!("Parameters changed: {:?}", params);
+                if params.devices > 0 {
+                    simulation.start(params);
+                } else {
+                    simulation.stop();
+                }
             }
         }
 
         let start = Instant::now();
+        info!("Running simulation for {:?}", params);
         for (topic, data) in simulation.iter() {
             match client.publish(topic, QoS::AtLeastOnce, false, data).await {
                 Ok(_) => (),
@@ -105,7 +108,8 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
             }
         }
         let remainder = params.wait_time.saturating_sub(start.elapsed());
-        tokio::time::sleep(remainder.max(Duration::from_secs(0))).await;
+        info!("Sleeping for {:?}", remainder);
+        tokio::time::sleep(remainder).await;
     }
 }
 
