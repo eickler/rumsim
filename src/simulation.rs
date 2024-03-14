@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::device::Device;
+use crate::device::{DataPointIterator, Device};
 use log::info;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -35,9 +35,11 @@ impl Simulation {
         }
     }
 
-    // TODO: Make this a real iterator!
-    pub fn iter(&mut self) -> Vec<(String, String)> {
-        self.devices.iter_mut().flat_map(|d| d.iter()).collect()
+    pub fn iter(&mut self) -> SimulationIterator {
+        SimulationIterator {
+            devices_iter: self.devices.iter_mut(),
+            current_device_iter: None,
+        }
     }
 
     pub fn start(&mut self, param: SimulationParameters) {
@@ -60,5 +62,26 @@ impl Simulation {
         info!("Stopping simulation.");
         self.devices.clear();
         self.devices = Vec::with_capacity(0);
+    }
+}
+
+pub struct SimulationIterator<'a> {
+    devices_iter: std::slice::IterMut<'a, Device>,
+    current_device_iter: Option<DataPointIterator<'a>>,
+}
+
+impl<'a> Iterator for SimulationIterator<'a> {
+    type Item = (String, String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(device_iter) = &mut self.current_device_iter {
+                if let Some(data_point) = device_iter.next() {
+                    return Some(data_point.clone());
+                }
+            }
+            let next_device = self.devices_iter.next()?;
+            self.current_device_iter = Some(next_device.iter());
+        }
     }
 }
