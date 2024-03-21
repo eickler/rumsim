@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rumsim-deployment
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: rumsim
+          image: rumsim:latest
+          env:
+            - name: URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rumsim-config
+                  key: url
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: rumsim-credentials
+                  key: user
+            - name: PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rumsim-credentials
+                  key: pass

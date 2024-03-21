@@ -42,3 +42,8 @@ Topic: /device\_{cluster ID}\_{device ID}/{data point name}
 Format time,value
 
 Cluster ID distinguishes devices from several running simulators.
+
+## TBDs
+
+- Compile into a static image with libmusl and try from:scratch container.
+- Remove file-based configuration and stick with helm/variables.

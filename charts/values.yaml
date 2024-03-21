@@ -1,0 +1,5 @@
+rumsim:
+  url: "mqtt://localhost:1883"
+  credentials:
+    user: "mqtt"
+    pass: "pass"
