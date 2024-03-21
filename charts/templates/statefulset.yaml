@@ -1,14 +1,21 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: rumsim-deployment
+  name: "{{ include "rumsim.fullname" . }}"
 spec:
-  replicas: 1
+  serviceName: "{{ include "rumsim.name" . }}"
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: "{{ include "rumsim.name" . }}"
   template:
+    metadata:
+      labels:
+        app: "{{ include "rumsim.name" . }}"
     spec:
       containers:
         - name: rumsim
-          image: rumsim:latest
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           env:
             - name: URL
               valueFrom:
@@ -25,3 +32,5 @@ spec:
                 secretKeyRef:
                   name: rumsim-credentials
                   key: pass
+            - name: RUST_LOG
+              value: info

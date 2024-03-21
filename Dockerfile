@@ -10,6 +10,6 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/src/rumsim/target/release/rumsim /usr/local/bin/rumsim
-COPY benchmark.toml .
+COPY defaults.toml .
 
 CMD ["rumsim"]

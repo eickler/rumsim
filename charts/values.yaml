@@ -1,5 +1,11 @@
+replicaCount: 1
+
+image:
+  repository: eickler/rumsim
+  tag: latest
+
 rumsim:
-  url: "mqtt://localhost:1883"
+  url: "mqtt://emqx-listeners:1883"
   credentials:
     user: "mqtt"
     pass: "pass"

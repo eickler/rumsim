@@ -45,5 +45,7 @@ Cluster ID distinguishes devices from several running simulators.
 
 ## TBDs
 
+- Convert into StatefulSet for scaling up.
+- Liveness/readiness probes?
 - Compile into a static image with libmusl and try from:scratch container.
 - Remove file-based configuration and stick with helm/variables.

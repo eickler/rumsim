@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: rumsim-config
 data:
-  url: { { .Values.rumsim.url | quote } }
+  url: "{{ .Values.rumsim.url }}"
