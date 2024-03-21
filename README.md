@@ -1,10 +1,13 @@
 # Running the benchmark
 
-## Install and start the nats-server
+## Configure an MQTT server to send data to
 
 ```
-brew install nats-server
-nats-server -c server.conf
+export URL=<mqtt://mqtt.myserver.io:1883>
+export USER=<user>
+export PASS=<pass>
+export CLIENT_ID=<client ID>
+export QOS=0
 ```
 
 ## Build and run the device simulator
@@ -14,26 +17,26 @@ cargo build
 target/debug/rumsim
 ```
 
-## Control the device simulator from nats
+## Control the device simulator through MQTT
+
+- Connect an client of your choice to the broker.
+- Send commands to the topic "control" (or your topic configured with the variable CONTROL_TOPIC).
+- Starting the simulation:
 
 ```
-brew install nats-io/nats-tools/nats
+start <devices> <data points> <wait time in secs> <seed>
+start 2 2 5 1
 ```
 
-Start the simulated devices:
+- Stopping the simulation:
 
 ```
-nats --user=mqtt --password=pass pub control "start <devices> <data points> <wait time in secs> <seed>"
-nats --user=mqtt --password=pass pub control "start 2 2 5 1"
-```
-
-You can send a start command at any time to change the simulated devices. Stop the simulated devices:
-
-```
-nats --user=mqtt --password=pass pub control "stop"
+stop
 ```
 
 ## Message format
+
+This is the current format that data is sent in:
 
 Topic: /device\_{cluster ID}\_{device ID}/{data point name}
 Format time,value

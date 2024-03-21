@@ -1,4 +1,3 @@
-[control]
 url = "mqtt://localhost:1883"
 user = "mqtt"
 pass = "pass"

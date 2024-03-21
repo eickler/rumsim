@@ -7,7 +7,7 @@ use log::{debug, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use simulation::{Simulation, SimulationParameters};
 use tokio::sync::watch;
-use tokio::time::{timeout, Duration, Instant};
+use tokio::time::{sleep, timeout, Duration, Instant};
 
 mod commands;
 mod device;
@@ -30,6 +30,7 @@ async fn main() {
     let command_handle = tokio::spawn(async move { listen(eventloop, params_tx).await });
     info!("Started, waiting for commands...");
     futures::future::select(simulation_handle, command_handle).await;
+    print!("Exiting...");
     /*
         TODO: Handle the situation when there is a connection error somewhere.
         The simulation should try to reconnect and continue with the same simulation parameters,
@@ -88,12 +89,14 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
 
     loop {
         if let Ok(_) = timeout(remainder, params_rx.changed()).await {
-            params = params_rx.borrow().clone();
+            params = params_rx.borrow_and_update().clone();
             if params.devices > 0 {
                 simulation.start(params);
             } else {
                 simulation.stop();
                 remainder = params.wait_time.clone();
+                // For whatever reason: If I don't wait at least a little bit here, this runs into an infinite loop if the other end is not connected right from the start.
+                sleep(Duration::from_millis(1)).await;
                 continue;
             }
         }
@@ -118,7 +121,7 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
 }
 
 fn get_qos() -> QoS {
-    match CONFIG.control.qos {
+    match CONFIG.qos {
         0 => QoS::AtMostOnce,
         1 => QoS::AtLeastOnce,
         2 => QoS::ExactlyOnce,
@@ -128,16 +131,15 @@ fn get_qos() -> QoS {
 
 /// Create the MQTT connection based on the configuration.
 async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
-    let config = &CONFIG.control;
-    let url = format!("{}?client_id={}", config.url, config.client_id);
+    let url = format!("{}?client_id={}", CONFIG.url, CONFIG.client_id);
     let mut opts = MqttOptions::parse_url(url).unwrap();
 
-    opts.set_credentials(&config.user, &config.pass);
+    opts.set_credentials(&CONFIG.user, &CONFIG.pass);
     opts.set_keep_alive(Duration::from_secs(5));
 
-    let (client, eventloop) = AsyncClient::new(opts, config.capacity);
+    let (client, eventloop) = AsyncClient::new(opts, CONFIG.capacity);
     client
-        .subscribe(&config.control_topic, QoS::AtMostOnce)
+        .subscribe(&CONFIG.control_topic, QoS::AtMostOnce)
         .await
         .unwrap(); // It's OK if this panics when there's no connection.
 
