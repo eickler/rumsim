@@ -45,7 +45,6 @@ Cluster ID distinguishes devices from several running simulators.
 
 ## TBDs
 
-- Convert into StatefulSet for scaling up.
+- Convert into StatefulSet for scaling up and distribute the devices ... make sure that the seed somehow includes the ordinal number of the pod, so that there is a differentiation.
 - Liveness/readiness probes?
 - Compile into a static image with libmusl and try from:scratch container.
-- Remove file-based configuration and stick with helm/variables.

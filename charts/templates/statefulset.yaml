@@ -17,6 +17,10 @@ spec:
         - name: rumsim
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           env:
+            - name: CLIENT_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: URL
               valueFrom:
                 configMapKeyRef:

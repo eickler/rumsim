@@ -5,6 +5,7 @@ extern crate log;
 use crate::commands::Command::{Start, Stop};
 use log::{debug, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
+use settings::Settings;
 use simulation::{Simulation, SimulationParameters};
 use tokio::sync::watch;
 use tokio::time::{sleep, timeout, Duration, Instant};
@@ -16,8 +17,7 @@ mod settings;
 mod simulation;
 
 lazy_static! {
-    static ref CONFIG: settings::Settings =
-        settings::Settings::new().expect("Configuration cannot be loaded.");
+    static ref CONFIG: Settings = Settings::new();
 }
 
 /// Main loop of running the simulation and receiving commands to control the simulation through MQTT.

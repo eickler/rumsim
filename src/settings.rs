@@ -1,9 +1,4 @@
-use config::{Config, ConfigError};
-use serde::Deserialize;
-
-const CONFIG_FILE: &str = "defaults";
-
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub url: String,
     pub user: String,
@@ -14,14 +9,27 @@ pub struct Settings {
     pub qos: u8,
 }
 
+pub fn get(env_variable: &str, default: &str) -> String {
+    std::env::var(env_variable).unwrap_or(default.to_string())
+}
+
+pub fn get_num(env_variable: &str, default: usize) -> usize {
+    std::env::var(env_variable)
+        .unwrap_or(default.to_string())
+        .parse()
+        .unwrap() // It's OK to panic if someone sets a broken number in the environment.
+}
+
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
-        let file = config::File::with_name(CONFIG_FILE);
-        let environment = config::Environment::default();
-        let settings = Config::builder()
-            .add_source(file)
-            .add_source(environment)
-            .build()?;
-        settings.try_deserialize()
+    pub fn new() -> Settings {
+        Settings {
+            url: get("URL", "mqtt://localhost:1883"),
+            user: get("USER", "mqtt"),
+            pass: get("PASS", "pass"),
+            client_id: get("CLIENT_ID", "rumsim-0"),
+            control_topic: get("CONTROL_TOPIC", "control"),
+            capacity: get_num("CAPACITY", 1000),
+            qos: get_num("QOS", 1) as u8,
+        }
     }
 }
