@@ -1,6 +1,6 @@
+use chrono::Utc;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::generator::{create_generator, Generator, GeneratorType};
 
@@ -14,7 +14,7 @@ impl Device {
     /// Create a new device with the given cluster and device IDs and the number of data points.
     /// Cluster ID serves as a prefix for the device name to distinguish several simulators from each other.
     pub fn new(cluster_id: &str, device_id: usize, data_points: usize, seed: u64) -> Self {
-        let name = format!("/{}_{}/", cluster_id, device_id);
+        let name = format!("{}_{}", cluster_id, device_id);
         let generators = Self::create_data_point_generators(data_points);
         let rng = StdRng::seed_from_u64(seed);
         Device {
@@ -24,11 +24,27 @@ impl Device {
         }
     }
 
-    pub fn iter(&mut self) -> DataPointIterator {
-        DataPointIterator {
-            device: self,
-            index: 0,
-        }
+    /// Iterate over the data point generators and collect them into a string of the form
+    /// 201,S,<time>,SF,<data point 1>,<value 1>,,SF,<data point 2>,<value 2>,,...
+    /// What are the limitations here in terms of number of data points for C8Y?
+    pub fn generate(&mut self) -> (String, String) {
+        let topic = format!("s/us/{}", self.name);
+
+        let current_time = Utc::now();
+        let time_str = current_time.format("%+").to_string();
+
+        let data = self
+            .generators
+            .iter_mut()
+            .map(|generator| {
+                let (datapoint, value) = generator.generate(&mut self.rng);
+                format!("SF,{},{},", datapoint, value)
+            })
+            .collect::<Vec<String>>()
+            .join(",");
+
+        let message = format!("201,S,{},{}", time_str, data);
+        (topic, message)
     }
 
     /// Each device produces roughly 1/3 of each type of data point, status, noise, and sensor data.
@@ -51,39 +67,6 @@ impl Device {
         }
         generators
     }
-}
-
-pub struct DataPointIterator<'a> {
-    device: &'a mut Device,
-    index: usize,
-}
-
-impl<'a> Iterator for DataPointIterator<'a> {
-    type Item = (String, String);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.device.generators.len() {
-            let generator = &mut self.device.generators[self.index];
-            let (name, value) = generator.generate(&mut self.device.rng);
-
-            let topic = format!("{}{}", self.device.name, name);
-            let data = format!("{},{}", get_time(), value);
-
-            self.index += 1;
-
-            Some((topic, data))
-        } else {
-            None
-        }
-    }
-}
-
-pub fn get_time() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        .to_string()
 }
 
 #[cfg(test)]
@@ -131,10 +114,8 @@ mod tests {
     async fn test_iter() {
         let data_points = 1;
         let mut device = Device::new("rumsim-2", 3, data_points, 1);
-        let mut iter = device.iter();
-        let (topic, data) = iter.next().unwrap();
-        assert_eq!(topic, String::from("/rumsim-2_3/sensor_0"));
-        assert_eq!(data.split(',').count(), 2);
-        assert!(iter.next().is_none());
+        let (topic, data) = device.generate();
+        assert_eq!(topic, String::from("s/us/rumsim-2_3"));
+        assert_eq!(data.split(',').count(), 7);
     }
 }
