@@ -13,8 +13,8 @@ pub struct Device {
 impl Device {
     /// Create a new device with the given cluster and device IDs and the number of data points.
     /// Cluster ID serves as a prefix for the device name to distinguish several simulators from each other.
-    pub fn new(cluster_id: u64, device_id: usize, data_points: usize, seed: u64) -> Self {
-        let name = format!("/device_{}_{}/", cluster_id, device_id);
+    pub fn new(cluster_id: &str, device_id: usize, data_points: usize, seed: u64) -> Self {
+        let name = format!("/{}_{}/", cluster_id, device_id);
         let generators = Self::create_data_point_generators(data_points);
         let rng = StdRng::seed_from_u64(seed);
         Device {
@@ -130,10 +130,10 @@ mod tests {
     #[tokio::test]
     async fn test_iter() {
         let data_points = 1;
-        let mut device = Device::new(2, 3, data_points, 1);
+        let mut device = Device::new("rumsim-2", 3, data_points, 1);
         let mut iter = device.iter();
         let (topic, data) = iter.next().unwrap();
-        assert_eq!(topic, String::from("/device_2_3/sensor_0"));
+        assert_eq!(topic, String::from("/rumsim-2_3/sensor_0"));
         assert_eq!(data.split(',').count(), 2);
         assert!(iter.next().is_none());
     }

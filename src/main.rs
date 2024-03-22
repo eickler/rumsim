@@ -83,7 +83,7 @@ fn handle_cmd(
 
 async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<SimulationParameters>) {
     let qos = get_qos();
-    let mut simulation = Simulation::new();
+    let mut simulation = Simulation::new(&CONFIG.client_id);
     let mut params = SimulationParameters::default();
     let mut remainder = params.wait_time.clone();
 

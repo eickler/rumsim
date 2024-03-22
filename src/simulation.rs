@@ -1,3 +1,4 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Duration;
 
 use crate::device::{DataPointIterator, Device};
@@ -25,12 +26,14 @@ impl Default for SimulationParameters {
 }
 
 pub struct Simulation {
+    client_id: String,
     devices: Vec<Device>,
 }
 
 impl Simulation {
-    pub fn new() -> Self {
+    pub fn new(client_id: &str) -> Self {
         Simulation {
+            client_id: client_id.to_string(),
             devices: Vec::with_capacity(0),
         }
     }
@@ -51,9 +54,14 @@ impl Simulation {
         self.devices.clear();
         self.devices = Vec::with_capacity(param.devices);
 
-        let mut rng = StdRng::seed_from_u64(param.seed);
+        // Ensure that each instance of the simulator has a unique seed derived from the input seed and the instance ID.
+        let mut hasher = DefaultHasher::new();
+        self.client_id.hash(&mut hasher);
+        param.seed.hash(&mut hasher);
+        let mut rng = StdRng::seed_from_u64(hasher.finish());
+
         for i in 0..param.devices {
-            let device = Device::new(param.seed, i, param.data_points, rng.gen());
+            let device = Device::new(&self.client_id, i, param.data_points, rng.gen());
             self.devices.push(device);
         }
     }
