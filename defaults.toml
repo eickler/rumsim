@@ -1,7 +1,0 @@
-url = "mqtt://localhost:1883"
-user = "mqtt"
-pass = "pass"
-control_topic = "control"
-client_id = 123
-capacity = 1000
-qos = 1
