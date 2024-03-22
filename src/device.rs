@@ -30,21 +30,24 @@ impl Device {
     pub fn generate(&mut self) -> (String, String) {
         let topic = format!("s/us/{}", self.name);
 
+        let mut message = String::with_capacity(40 + 20 * self.generators.len());
+        message.push_str("201,S,");
+
         let current_time = Utc::now();
-        let time_str = current_time.format("%+").to_string();
+        // The comma at the end of the format string is intentional.
+        let time_str = current_time.format("%+,").to_string();
+        message.push_str(time_str.as_str());
 
         let data = self
             .generators
             .iter_mut()
-            .map(|generator| {
+            .fold(message, |mut acc, generator| {
                 let (datapoint, value) = generator.generate(&mut self.rng);
-                format!("SF,{},{},", datapoint, value)
-            })
-            .collect::<Vec<String>>()
-            .join(",");
+                acc.push_str(&format!("SF,{},{},", datapoint, value));
+                acc
+            });
 
-        let message = format!("201,S,{},{}", time_str, data);
-        (topic, message)
+        (topic, data)
     }
 
     /// Each device produces roughly 1/3 of each type of data point, status, noise, and sensor data.

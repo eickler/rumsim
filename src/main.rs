@@ -2,6 +2,8 @@
 extern crate lazy_static;
 extern crate log;
 
+use std::env;
+
 use crate::commands::Command::{Start, Stop};
 use log::{debug, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
@@ -23,12 +25,16 @@ lazy_static! {
 /// Main loop of running the simulation and receiving commands to control the simulation through MQTT.
 #[tokio::main]
 async fn main() {
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info")
+    }
     env_logger::init();
+
     let (client, eventloop) = create_mqtt_client().await;
     let (params_tx, params_rx) = watch::channel(SimulationParameters::default());
     let simulation_handle = tokio::spawn(async move { simulate(client, params_rx).await });
     let command_handle = tokio::spawn(async move { listen(eventloop, params_tx).await });
-    info!("Started, waiting for commands...");
+    info!("Started, waiting for commands...\n{:?}", *CONFIG);
     futures::future::select(simulation_handle, command_handle).await;
     print!("Exiting...");
     /*

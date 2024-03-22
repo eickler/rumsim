@@ -43,17 +43,7 @@ Format time,value
 
 Cluster ID distinguishes devices from several running simulators.
 
-## TBDs
-
-- C8Y format support:
-  Topic is s/us/<device ID>
-  Payload could be per device
-  201,S,<time>,SF,<data point 1>,<value 1>,<unit>,<data point 2>,<value 2>,<unit>,...
-  or
-  200,SF,<data point 1>,<value 1>
-  200,SF,<data point 2>,<value 2>
-  ...
-  Which one? I guess the first one creates only one transaction and will be faster despite of the additional text...also simplifies the simulator.
+## Ideas
 
 - Observability support using OTLP and Grafana
 - Liveness/readiness probes?
