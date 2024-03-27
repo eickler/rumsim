@@ -43,9 +43,9 @@ Format time,value
 
 Cluster ID distinguishes devices from several running simulators.
 
-## TBDs
+## Ideas
 
-- C8Y format support
 - Observability support using OTLP and Grafana
 - Liveness/readiness probes?
 - Compile into a static image with libmusl and try from:scratch container.
+- Implement an operator to distribute and scale the workload? Maybe even auto-scale?
