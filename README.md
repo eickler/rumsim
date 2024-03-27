@@ -46,6 +46,7 @@ Cluster ID distinguishes devices from several running simulators.
 ## Ideas
 
 - Observability support using OTLP and Grafana
+- Remove printing of auth token to log.
 - Liveness/readiness probes?
 - Compile into a static image with libmusl and try from:scratch container.
 - Implement an operator to distribute and scale the workload? Maybe even auto-scale?

@@ -7,6 +7,8 @@ pub struct Settings {
     pub client_id: String,
     pub capacity: usize,
     pub qos: u8,
+    pub otlp_collector: String,
+    pub otlp_auth: String,
 }
 
 pub fn get(env_variable: &str, default: &str) -> String {
@@ -30,6 +32,8 @@ impl Settings {
             control_topic: get("CONTROL_TOPIC", "control"),
             capacity: get_num("CAPACITY", 1000),
             qos: get_num("QOS", 1) as u8,
+            otlp_collector: get("OTLP_ENDPOINT", "https://localhost:4317"),
+            otlp_auth: get("OTLP_AUTH", ""),
         }
     }
 }
