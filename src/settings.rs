@@ -8,7 +8,7 @@ pub struct Settings {
     pub capacity: usize,
     pub qos: u8,
     pub otlp_collector: String,
-    pub otlp_auth: String,
+    pub otlp_auth: Option<String>,
 }
 
 pub fn get(env_variable: &str, default: &str) -> String {
@@ -33,7 +33,7 @@ impl Settings {
             capacity: get_num("CAPACITY", 1000),
             qos: get_num("QOS", 1) as u8,
             otlp_collector: get("OTLP_ENDPOINT", "https://localhost:4317"),
-            otlp_auth: get("OTLP_AUTH", ""),
+            otlp_auth: std::env::var("OLTP_AUTH").ok(),
         }
     }
 }

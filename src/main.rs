@@ -5,56 +5,27 @@ extern crate log;
 use std::env;
 
 use log::{debug, info, warn};
-use opentelemetry::KeyValue;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{runtime, trace as sdktrace, Resource};
-use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
+use observability::Metering;
 use tracing::span;
-use tracing_subscriber::prelude::*;
 
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use settings::Settings;
 use simulation::{Simulation, SimulationParameters};
 use tokio::sync::watch;
 use tokio::time::{sleep, timeout, Duration, Instant};
-use tracing_subscriber::filter::EnvFilter;
 
 use crate::commands::Command::{Start, Stop};
+use crate::observability::init_tracing;
 
 mod commands;
 mod device;
 mod generator;
+mod observability;
 mod settings;
 mod simulation;
 
 lazy_static! {
     static ref CONFIG: Settings = Settings::new();
-}
-
-fn init_tracer() {
-    let mut headers = std::collections::HashMap::new();
-    headers.insert("Authorization".to_string(), CONFIG.otlp_auth.clone());
-
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .http()
-                .with_headers(headers)
-                .with_endpoint(CONFIG.otlp_collector.clone()),
-        )
-        .with_trace_config(
-            sdktrace::config()
-                .with_resource(Resource::new(vec![KeyValue::new(SERVICE_NAME, "rumsim")])),
-        )
-        .install_batch(runtime::Tokio)
-        .expect("Failed to initialize tracer.");
-
-    let subscriber = tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(tracing_opentelemetry::layer().with_tracer(tracer));
-
-    tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
 /// Main loop of running the simulation and receiving commands to control the simulation through MQTT.
@@ -65,7 +36,7 @@ async fn main() {
         env::set_var("RUST_LOG", "info")
     }
     env_logger::init();
-    init_tracer();
+    init_tracing();
 
     let (client, eventloop) = create_mqtt_client().await;
     let (params_tx, params_rx) = watch::channel(SimulationParameters::default());
@@ -125,14 +96,18 @@ fn handle_cmd(
 }
 
 async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<SimulationParameters>) {
+    let metering = Metering::new();
+
     let qos = get_qos();
     let mut simulation = Simulation::new(&CONFIG.client_id);
     let mut params = SimulationParameters::default();
+    let mut datapoints = params.devices * params.data_points;
     let mut remainder = params.wait_time.clone();
 
     loop {
         if let Ok(_) = timeout(remainder, params_rx.changed()).await {
             params = params_rx.borrow_and_update().clone();
+            datapoints = params.devices * params.data_points;
             if params.devices > 0 {
                 simulation.start(params);
             } else {
@@ -159,11 +134,15 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
                 }
             }
         }
-        remainder = params.wait_time.saturating_sub(start.elapsed());
+
+        let elapsed = start.elapsed();
+        remainder = params.wait_time.saturating_sub(elapsed);
         info!("Sleeping for {:?}", remainder);
         if remainder == Duration::ZERO {
+            metering.is_overloaded();
             warn!("Messages cannot be sent fast enough. Increase capacity on receiving end, increase wait time or reduce the number of data points.");
         }
+        metering.record_datapoints(datapoints, elapsed);
         tracing::info!(parent: &simulation_span, "Sleeping for {:?}", remainder);
     }
 }
