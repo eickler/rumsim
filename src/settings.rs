@@ -7,6 +7,8 @@ pub struct Settings {
     pub client_id: String,
     pub capacity: usize,
     pub qos: u8,
+    pub otlp_collector: Option<String>,
+    pub otlp_auth: Option<String>,
 }
 
 pub fn get(env_variable: &str, default: &str) -> String {
@@ -30,6 +32,8 @@ impl Settings {
             control_topic: get("CONTROL_TOPIC", "control"),
             capacity: get_num("CAPACITY", 1000),
             qos: get_num("QOS", 1) as u8,
+            otlp_collector: std::env::var("OTLP_ENDPOINT").ok(),
+            otlp_auth: std::env::var("OLTP_AUTH").ok(),
         }
     }
 }

@@ -17,7 +17,10 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}",
-      "env": { "RUST_LOG": "info" }
+      "env": {
+        "RUST_LOG": "info",
+        "OTLP_ENDPOINT": "https://localhost:4317"
+      }
     },
     {
       "type": "lldb",

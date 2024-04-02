@@ -1,20 +1,23 @@
 #[macro_use]
 extern crate lazy_static;
-extern crate log;
 
-use std::env;
+use observability::Metering;
+use opentelemetry::global::shutdown_tracer_provider;
+use tracing::{debug, info, span, trace, warn};
 
-use crate::commands::Command::{Start, Stop};
-use log::{debug, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use settings::Settings;
 use simulation::{Simulation, SimulationParameters};
 use tokio::sync::watch;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
+use crate::commands::Command::{Start, Stop};
+use crate::observability::init_tracing;
+
 mod commands;
 mod device;
 mod generator;
+mod observability;
 mod settings;
 mod simulation;
 
@@ -22,35 +25,44 @@ lazy_static! {
     static ref CONFIG: Settings = Settings::new();
 }
 
-/// Main loop of running the simulation and receiving commands to control the simulation through MQTT.
+fn anonymize(s: &str) -> String {
+    format!("{}…{}", &s[..1], &s[s.len() - 1..])
+}
+
+fn anonymize_opt(s: &Option<String>) -> String {
+    match s {
+        Some(s) => anonymize(s),
+        None => "None".to_string(),
+    }
+}
+
+#[tracing::instrument]
 #[tokio::main]
 async fn main() {
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "info")
-    }
-    env_logger::init();
+    init_tracing();
 
     let (client, eventloop) = create_mqtt_client().await;
     let (params_tx, params_rx) = watch::channel(SimulationParameters::default());
     let simulation_handle = tokio::spawn(async move { simulate(client, params_rx).await });
     let command_handle = tokio::spawn(async move { listen(eventloop, params_tx).await });
-    info!("Started, waiting for commands...\n{:?}", *CONFIG);
+
+    info!(mqtt_url = &CONFIG.url, mqtt_client_id = &CONFIG.client_id,
+        mqtt_user = &CONFIG.user, mqtt_pass = anonymize(&CONFIG.pass), mqtt_qos = CONFIG.qos,
+        otlp_collector = ?CONFIG.otlp_collector, otlp_auth = anonymize_opt(&CONFIG.otlp_auth),
+        "Started, waiting for commands...");
     futures::future::select(simulation_handle, command_handle).await;
-    print!("Exiting...");
-    /*
-        TODO: Handle the situation when there is a connection error somewhere.
-        The simulation should try to reconnect and continue with the same simulation parameters,
-        but for that it would need to preserve the parameters.
-    */
+
+    info!("Shutting down...");
+    shutdown_tracer_provider();
 }
 
 async fn listen(mut eventloop: EventLoop, params_tx: watch::Sender<SimulationParameters>) {
     loop {
         match eventloop.poll().await {
             Ok(Event::Incoming(Packet::Publish(msg))) => {
-                debug!("Received incoming publish: {:?}", msg);
+                trace!(message = ?msg, "Received publish");
                 if let Err(e) = handle_cmd(msg.payload.to_vec(), &params_tx) {
-                    warn!("Send error: {:?}", e);
+                    warn!(error = ?e, "Send error");
                     return;
                 }
             }
@@ -58,11 +70,11 @@ async fn listen(mut eventloop: EventLoop, params_tx: watch::Sender<SimulationPar
                 warn!("Disconnected from the broker.");
                 return;
             }
-            Ok(_) => {
-                //debug!("Received: {:?}", x);
+            Ok(x) => {
+                trace!(message = ?x, "Received message");
             }
             Err(e) => {
-                warn!("Failed to connect: {}", e);
+                warn!(error = ?e, "Failed to connect");
                 return;
             }
         }
@@ -88,17 +100,23 @@ fn handle_cmd(
 }
 
 async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<SimulationParameters>) {
+    let metering = Metering::new();
+
     let qos = get_qos();
     let mut simulation = Simulation::new(&CONFIG.client_id);
     let mut params = SimulationParameters::default();
+    let mut datapoints = params.devices * params.data_points;
     let mut remainder = params.wait_time.clone();
 
     loop {
         if let Ok(_) = timeout(remainder, params_rx.changed()).await {
             params = params_rx.borrow_and_update().clone();
+            datapoints = params.devices * params.data_points;
             if params.devices > 0 {
+                info!(devices = params.devices, data_points = params.data_points, wait_time = ?params.wait_time, seed = params.seed, "Starting simulation");
                 simulation.start(params);
             } else {
+                info!("Stopping simulation.");
                 simulation.stop();
                 remainder = params.wait_time.clone();
                 // For whatever reason: If I don't wait at least a little bit here, this runs into an infinite loop if the other end is not connected right from the start.
@@ -107,22 +125,30 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
             }
         }
 
+        let simulation_span = span!(tracing::Level::INFO, "simulation_run");
+        let _enter = simulation_span.enter();
+        debug!(parent: &simulation_span, devices = params.devices, data_points = params.data_points, wait_time = ?params.wait_time, seed = params.seed, "Running simulation");
+
         let start = Instant::now();
-        info!("Running simulation for {:?}", params);
         for (topic, data) in simulation.iter() {
             match client.publish(topic, qos, false, data).await {
                 Ok(_) => (),
                 Err(e) => {
-                    warn!("Failed to publish: {}", e);
+                    warn!(error = ?e, "Failed to publish");
                     return;
                 }
             }
         }
-        remainder = params.wait_time.saturating_sub(start.elapsed());
-        info!("Sleeping for {:?}", remainder);
+
+        let elapsed = start.elapsed();
+        remainder = params.wait_time.saturating_sub(elapsed);
         if remainder == Duration::ZERO {
-            warn!("Messages cannot be sent fast enough. Increase capacity on receiving end, increase wait time or reduce the number of data points.");
+            metering.is_overloaded();
+            warn!(parent: &simulation_span, "Messages cannot be sent fast enough. Increase capacity on receiving end, increase wait time or reduce the number of data points.");
         }
+        metering.record_datapoints(datapoints, params.wait_time);
+        metering.record_capacity(elapsed, params.wait_time);
+        debug!(parent: &simulation_span, remainder=?remainder, "Sleeping");
     }
 }
 
