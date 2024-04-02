@@ -10,6 +10,21 @@ export CLIENT_ID=<client ID>
 export QOS=0
 ```
 
+## Optionally configure an OTLP endpoint to send traces and metrics to
+
+```
+export OTLP_COLLECTOR=https://localhost:4317
+export OTLP_AUTH=...
+export RUST_LOG=...
+```
+
+Log levels are:
+
+- trace: Individual data points that are generated.
+- debug: Start and stop of individual simulation runs.
+- info: Start and stop of simulation.
+- error: Error messages.
+
 ## Build and run the device simulator
 
 ```
@@ -36,28 +51,34 @@ stop
 
 ## Message format
 
-This is the current format that data is sent in:
+Data is sent in Cumulocity SmartREST 2.0 format.
 
-Topic: /device\_{cluster ID}\_{device ID}/{data point name}
-Format time,value
+Topic:
 
-Cluster ID distinguishes devices from several running simulators.
+```
+s/us/{instance ID}\_{device ID}
+```
+
+Payload:
+
+```
+201,S,<time>,SF,<datapoint 1>,<value 1>,,SF,<datapoint 2>,<value 2>,…
+```
+
+"instance ID" is the ID of the simulator POD in Kubernetes in case of multiple PODs, otherwise it's the configured client ID.
+
+## Known issues
+
+The simulator currently just crashes if you send so many data points that the maximum packet size of the MQTT broker is exceeded:
+
+```
+2024-04-02T15:09:50.377381Z WARN rumsim: Failed to connect error=MqttState(OutgoingPacketTooLarge { pkt_size: 18136, max: 10240 })
+```
+
+However, the last messages are apparently not correctly forwarded to the OTLP endpoint for some reason (even though I call the shutdown method).
 
 ## Ideas
 
-Observability support using OTLP and a cloud service. TODOs:
--- Pass the values in the log messages as parameters
-
-- Selected debug information, some enter/exit methods using tracing crate? What is the overhead?
-
-Robustness -- what happens if OTLP is not configured, breaks in the middle ...? Seems to just log and ignore ..
-Others:
-
-- Remove printing of auth token to log.
-- Liveness/readiness probes?
-- Compile into a static image with libmusl and try from:scratch container.
 - Implement an operator to distribute and scale the workload? Maybe even auto-scale?
 - Set "deployment.environment" for traces to show up in Aspecto (Kubernetes? Which cluster?)
-- Simulator currently just crashes if you send so many data points that the maximum packet size of the MQTT broker is exceeded:
-  "2024-04-02T15:09:50.377381Z WARN rumsim: Failed to connect error=MqttState(OutgoingPacketTooLarge { pkt_size: 18136, max: 10240 })"
-  However, the last messages are apparently not correctly forwarded to the OTLP endpoint for some reason (even though I call the shutdown method).
+- Compile into a static image with libmusl and try from:scratch container.
