@@ -2,7 +2,6 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Duration;
 
 use crate::device::Device;
-use log::info;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -45,11 +44,6 @@ impl Simulation {
     }
 
     pub fn start(&mut self, param: SimulationParameters) {
-        info!(
-            "Starting simulation: {} devices, {} data points, {:?} wait time, {} seed",
-            param.devices, param.data_points, param.wait_time, param.seed
-        );
-
         self.devices.clear();
         self.devices = Vec::with_capacity(param.devices);
 
@@ -66,7 +60,6 @@ impl Simulation {
     }
 
     pub fn stop(&mut self) {
-        info!("Stopping simulation.");
         self.devices.clear();
         self.devices = Vec::with_capacity(0);
     }

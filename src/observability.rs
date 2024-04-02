@@ -19,12 +19,12 @@ fn new_exporter() -> TonicExporterBuilder {
     }
     opentelemetry_otlp::new_exporter()
         .tonic()
-        .with_endpoint(CONFIG.otlp_collector.clone())
+        .with_endpoint(CONFIG.otlp_collector.clone().unwrap())
         .with_timeout(Duration::from_secs(3))
         .with_metadata(map.clone())
 }
 
-pub fn init_tracing() {
+fn init_otlp_tracing() {
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(new_exporter())
@@ -35,14 +35,33 @@ pub fn init_tracing() {
         .install_batch(opentelemetry_sdk::runtime::Tokio)
         .expect("Failed to initialize tracer.");
 
+    let layer = tracing_opentelemetry::layer().with_tracer(tracer);
     let subscriber = tracing_subscriber::registry()
         .with(EnvFilter::from_default_env())
-        .with(tracing_opentelemetry::layer().with_tracer(tracer));
-
+        .with(layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
+fn init_stdout_tracing() {
+    let layer = tracing_subscriber::fmt::layer();
+    let subscriber = tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(layer);
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+}
+
+pub fn init_tracing() {
+    if CONFIG.otlp_collector != None {
+        init_otlp_tracing();
+    } else {
+        init_stdout_tracing();
+    };
+}
+
 pub fn init_metering() {
+    if CONFIG.otlp_collector == None {
+        return;
+    }
     let meter_provider = opentelemetry_otlp::new_pipeline()
         .metrics(opentelemetry_sdk::runtime::Tokio)
         .with_exporter(new_exporter())

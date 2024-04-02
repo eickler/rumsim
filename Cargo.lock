@@ -1106,7 +1106,6 @@ dependencies = [
  "env_logger",
  "futures",
  "lazy_static",
- "log",
  "mockall",
  "opentelemetry",
  "opentelemetry-otlp",
