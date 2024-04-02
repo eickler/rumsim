@@ -52,9 +52,11 @@ Observability support using OTLP and a cloud service. TODOs:
 - Selected debug information, some enter/exit methods using tracing crate? What is the overhead?
 - Replace log crate?
 
+Robustness -- what happens if OTLP is not configured, breaks in the middle ...? Seems to just log and ignore ..
 Others:
 
 - Remove printing of auth token to log.
 - Liveness/readiness probes?
 - Compile into a static image with libmusl and try from:scratch container.
 - Implement an operator to distribute and scale the workload? Maybe even auto-scale?
+- Set "deployment.environment" for traces to show up in Aspecto (Kubernetes? Which cluster?)

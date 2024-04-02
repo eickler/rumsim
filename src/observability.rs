@@ -51,16 +51,9 @@ pub fn init_metering() {
     global::set_meter_provider(meter_provider);
 }
 
-/*
-If setting the global meter provider does not work, we can change this to:
-pub fn new_meter() -> OtlpMetricPipeline<Tokio, MetricsExporterBuilder> {
-    opentelemetry_otlp::new_pipeline()
-        .metrics(opentelemetry_sdk::runtime::Tokio)
-        .with_exporter(new_exporter())
-*/
-
 pub struct Metering {
     datapoint_sec: Gauge<f64>,
+    capacity_percent: Gauge<f64>,
     overload_cnt: Counter<f64>,
     labels: Vec<KeyValue>,
 }
@@ -76,12 +69,17 @@ impl Metering {
             Key::new("service.replica").string(CONFIG.client_id.clone()),
         ];
 
-        let unit = Unit::new("1/s");
-        let datapoint_sec = meter.f64_gauge("datapoints").with_unit(unit).init();
+        let dp_unit = Unit::new("1/s");
+        let datapoint_sec = meter.f64_gauge("datapoints").with_unit(dp_unit).init();
+
+        let cap_unit = Unit::new("%");
+        let capacity_percent = meter.f64_gauge("capacity").with_unit(cap_unit).init();
+
         let overload_cnt = meter.f64_counter("overload").init();
 
         Metering {
             datapoint_sec,
+            capacity_percent,
             overload_cnt,
             labels,
         }
@@ -94,5 +92,10 @@ impl Metering {
     pub fn record_datapoints(&self, datapoints: usize, elapsed: Duration) {
         let dpsec_value = datapoints as f64 / elapsed.as_secs_f64();
         self.datapoint_sec.record(dpsec_value, &self.labels);
+    }
+
+    pub fn record_capacity(&self, elapsed: Duration, wait_time: Duration) {
+        let cap_value = elapsed.as_secs_f64() / wait_time.as_secs_f64() * 100.0;
+        self.capacity_percent.record(cap_value, &self.labels);
     }
 }

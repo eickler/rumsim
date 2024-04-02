@@ -142,7 +142,8 @@ async fn simulate(client: AsyncClient, mut params_rx: watch::Receiver<Simulation
             metering.is_overloaded();
             warn!("Messages cannot be sent fast enough. Increase capacity on receiving end, increase wait time or reduce the number of data points.");
         }
-        metering.record_datapoints(datapoints, elapsed);
+        metering.record_datapoints(datapoints, params.wait_time);
+        metering.record_capacity(elapsed, params.wait_time);
         tracing::info!(parent: &simulation_span, "Sleeping for {:?}", remainder);
     }
 }
