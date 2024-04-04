@@ -77,8 +77,7 @@ The simulator currently just crashes if you send so many data points that the ma
 
 However, the last messages are apparently not correctly forwarded to the OTLP endpoint for some reason (even though I call the shutdown method).
 
-## Ideas
+## Notes/ideas
 
-- Implement an operator to distribute and scale the workload? Maybe even auto-scale?
-- Set "deployment.environment" for traces to show up in Aspecto (Kubernetes? Which cluster?)
-- Compile into a static image with libmusl and try from:scratch container.
+- Try passing opentelemetry span IDs through MQTT 5? Is it possible to have an MQTT 3 fallback for servers not supporting mqtt 5?
+- Make OpenTelemetry and Tonic dependencies optional, put observability into an optional module and have a feature flag to compile OTLP support in or not. It looks like the whole observability stack adds 5 MB to the final binary?
