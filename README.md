@@ -79,5 +79,7 @@ However, the last messages are apparently not correctly forwarded to the OTLP en
 
 ## Notes/ideas
 
+Remote control and capacity parameters?
+
 - Try passing opentelemetry span IDs through MQTT 5? Is it possible to have an MQTT 3 fallback for servers not supporting mqtt 5?
 - Make OpenTelemetry and Tonic dependencies optional, put observability into an optional module and have a feature flag to compile OTLP support in or not. It looks like the whole observability stack adds 5 MB to the final binary?
