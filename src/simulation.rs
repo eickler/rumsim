@@ -52,3 +52,34 @@ impl<'a> Iterator for SimulationIterator<'a> {
         self.devices_iter.next().map(|device| device.generate())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simulation_new() {
+        let devices = 1;
+        let client_id = "test".to_string();
+        let parms = SimulationParameters {
+            client_id: client_id.clone(),
+            devices,
+            data_points: 1,
+            seed: 12345,
+            frequency_secs: 60,
+            qos: 2,
+        };
+
+        let mut simulation = Simulation::new(&parms);
+        assert_eq!(simulation.devices.len(), devices);
+
+        let mut iter = simulation.iter();
+        let (name, value) = iter.next().unwrap();
+        assert!(name.contains(&client_id));
+        assert!(name.contains("0")); // The device number of the first device.
+        assert!(value.contains("sensor_0")); // The name of the first data point.
+        assert!(value.contains("101.79")); // The value of the first data point with seed 12345.
+
+        assert!(iter.next().is_none());
+    }
+}

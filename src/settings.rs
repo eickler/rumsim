@@ -74,3 +74,42 @@ impl Settings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_variable() {
+        std::env::set_var("TEST_VAR", "value");
+        assert_eq!(get("TEST_VAR", "default"), "value");
+        std::env::remove_var("TEST_VAR");
+        assert_eq!(get("TEST_VAR", "default"), "default");
+    }
+
+    #[test]
+    fn test_get_num_existing_variable() {
+        std::env::set_var("TEST_NUM_VAR", "42");
+        assert_eq!(get_num("TEST_NUM_VAR", 0), 42);
+        std::env::remove_var("TEST_NUM_VAR");
+        assert_eq!(get_num("TEST_NUM_VAR", 0), 0);
+    }
+
+    #[test]
+    fn test_get_time_existing_variable() {
+        std::env::set_var("TEST_TIME_VAR", "2022-01-01T00:00:00Z");
+        let expected_time = DateTime::parse_from_rfc3339("2022-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(get_time("TEST_TIME_VAR", None), Some(expected_time));
+
+        let result = std::panic::catch_unwind(|| {
+            std::env::set_var("TEST_TIME_VAR", "Hans");
+            get_time("TEST_TIME_VAR", None);
+        });
+        assert!(result.is_err());
+
+        std::env::remove_var("TEST_TIME_VAR");
+        assert_eq!(get_time("TEST_TIME_VAR", None), None);
+    }
+}
