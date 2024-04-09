@@ -85,7 +85,7 @@ impl Metering {
 
         let labels = vec![
             Key::new(SERVICE_NAME).string("rumsim"),
-            Key::new("service.replica").string(CONFIG.client_id.clone()),
+            Key::new("service.replica").string(CONFIG.broker_client_id.clone()),
         ];
 
         let dp_unit = Unit::new("1/s");

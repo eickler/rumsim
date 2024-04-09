@@ -1,6 +1,0 @@
-apiVersion: v2
-name: rumsim
-description: A Helm chart deploying the Rust MQTT simulator into Kubernetes.
-type: application
-version: 0.1.0
-appVersion: "0.1.0"
