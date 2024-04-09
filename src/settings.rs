@@ -1,10 +1,12 @@
+use chrono::{DateTime, Utc};
+
 #[derive(Debug, Clone)]
 pub struct Settings {
     // Simulation related settings
     pub sim_devices: usize,
     pub sim_data_points: usize,
     pub sim_frequency_secs: u64,
-    pub sim_wait_time_secs: u64,
+    pub sim_start_time: Option<DateTime<Utc>>,
     pub sim_runs: usize,
     pub sim_seed: u64,
 
@@ -23,15 +25,26 @@ pub struct Settings {
     pub capacity: usize,
 }
 
-pub fn get(env_variable: &str, default: &str) -> String {
+fn get(env_variable: &str, default: &str) -> String {
     std::env::var(env_variable).unwrap_or(default.to_string())
 }
 
-pub fn get_num(env_variable: &str, default: usize) -> usize {
+fn get_num(env_variable: &str, default: usize) -> usize {
     std::env::var(env_variable)
         .unwrap_or(default.to_string())
         .parse()
         .unwrap() // It's OK to panic if someone sets a broken number in the environment.
+}
+
+fn get_time(env_variable: &str, default: Option<DateTime<Utc>>) -> Option<DateTime<Utc>> {
+    std::env::var(env_variable)
+        .ok()
+        .map(|time| {
+            DateTime::parse_from_rfc3339(&time)
+                .unwrap()
+                .with_timezone(&Utc)
+        })
+        .or(default)
 }
 
 impl Settings {
@@ -42,8 +55,8 @@ impl Settings {
             sim_data_points: get_num("SIM_DATA_POINTS", 100),
             sim_seed: get_num("SIM_SEED", 0) as u64,
             sim_frequency_secs: get_num("SIM_FREQUENCY_SECS", 1) as u64,
-            sim_wait_time_secs: get_num("SIM_WAIT_TIME_SECS", 0) as u64,
-            sim_runs: get_num("SIM_RUNS", 0),
+            sim_start_time: get_time("SIM_START_TIME", None),
+            sim_runs: get_num("SIM_RUNS", usize::MAX),
 
             // MQTT related settings
             broker_url: get("BROKER_URL", "mqtt://localhost:1883"),

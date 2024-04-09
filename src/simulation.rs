@@ -4,21 +4,30 @@ use crate::device::Device;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
+pub struct SimulationParameters {
+    pub client_id: String,
+    pub devices: usize,
+    pub data_points: usize,
+    pub seed: u64,
+    pub frequency_secs: u64,
+    pub qos: u8,
+}
+
 pub struct Simulation {
     devices: Vec<Device>,
 }
 
 impl Simulation {
-    pub fn new(client_id: &str, no_devices: usize, data_points: usize, seed: u64) -> Self {
+    pub fn new(parms: &SimulationParameters) -> Self {
         // Ensure that each instance of the simulator has a unique seed derived from the input seed and the instance ID.
         let mut hasher = DefaultHasher::new();
-        client_id.hash(&mut hasher);
-        seed.hash(&mut hasher);
+        parms.client_id.hash(&mut hasher);
+        parms.seed.hash(&mut hasher);
         let mut rng = StdRng::seed_from_u64(hasher.finish());
 
-        let mut devices = Vec::with_capacity(no_devices);
-        for i in 0..no_devices {
-            let device = Device::new(&client_id, i, data_points, rng.gen());
+        let mut devices = Vec::with_capacity(parms.devices);
+        for i in 0..parms.devices {
+            let device = Device::new(&parms.client_id, i, parms.data_points, rng.gen());
             devices.push(device);
         }
 

@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use chrono::Utc;
 use observability::Metering;
 use opentelemetry::global::shutdown_tracer_provider;
 use tracing::{debug, info, span, trace, warn};
@@ -10,7 +11,7 @@ use settings::Settings;
 use simulation::Simulation;
 use tokio::time::{sleep, Duration, Instant};
 
-use crate::observability::init_tracing;
+use crate::{observability::init_tracing, simulation::SimulationParameters};
 
 mod device;
 mod generator;
@@ -22,42 +23,42 @@ lazy_static! {
     static ref CONFIG: Settings = Settings::new();
 }
 
-fn anonymize(s: &str) -> String {
-    format!("{}…{}", &s[..1], &s[s.len() - 1..])
-}
-
-fn anonymize_opt(s: &Option<String>) -> String {
-    match s {
-        Some(s) => anonymize(s),
-        None => "None".to_string(),
-    }
-}
-
 #[tracing::instrument]
 #[tokio::main]
 async fn main() {
     init_tracing();
 
-    info!(broker_url = &CONFIG.broker_url,
-        broker_user = &CONFIG.broker_user, broker_pass = anonymize(&CONFIG.broker_pass),
-        broker_client_id = &CONFIG.broker_client_id, broker_qos = CONFIG.broker_qos,
-        otlp_collector = ?CONFIG.otlp_collector, otlp_auth = anonymize_opt(&CONFIG.otlp_auth),
-        capacity = CONFIG.capacity, sim_wait_time_secs = CONFIG.sim_wait_time_secs,
-        "Connecting to broker.");
-    let (client, eventloop) = create_mqtt_client().await;
-    let simulation_handle = tokio::spawn(async move { simulate(client).await });
-    let listen_handle = tokio::spawn(async move { listen(eventloop).await });
+    let (client, eventloop) = connect_broker().await;
+    wait_for_start_time().await;
 
+    let params = get_parameters();
+    let simulation_handle = tokio::spawn(async move { simulate(client, params).await });
+    let listen_handle = tokio::spawn(async move { listen(eventloop).await });
     futures::future::select(simulation_handle, listen_handle).await;
 
     info!("Shutting down.");
     shutdown_tracer_provider();
 }
 
-async fn simulate(client: AsyncClient) {
-    sleep(Duration::from_secs(CONFIG.sim_wait_time_secs)).await;
-    let metering = Metering::new();
+async fn connect_broker() -> (AsyncClient, EventLoop) {
+    info!(broker_url = &CONFIG.broker_url,
+        broker_user = &CONFIG.broker_user, broker_pass = anonymize(&CONFIG.broker_pass),
+        broker_client_id = &CONFIG.broker_client_id, broker_qos = CONFIG.broker_qos,
+        otlp_collector = ?CONFIG.otlp_collector, otlp_auth = anonymize_opt(&CONFIG.otlp_auth),
+        capacity = CONFIG.capacity, sim_start_time = ?CONFIG.sim_start_time,
+        "Connecting to broker.");
+    create_mqtt_client().await
+}
 
+async fn wait_for_start_time() {
+    if let Some(start_time) = CONFIG.sim_start_time {
+        let now = Utc::now();
+        let wait_time = (start_time - now).num_milliseconds().max(0) as u64;
+        sleep(Duration::from_millis(wait_time)).await;
+    }
+}
+
+fn get_parameters() -> SimulationParameters {
     info!(
         sim_devices = CONFIG.sim_devices,
         sim_data_points = CONFIG.sim_data_points,
@@ -66,23 +67,28 @@ async fn simulate(client: AsyncClient) {
         sim_runs = CONFIG.sim_runs,
         "Running the simulation."
     );
+    SimulationParameters {
+        client_id: CONFIG.broker_client_id.clone(),
+        devices: CONFIG.sim_devices,
+        data_points: CONFIG.sim_data_points,
+        seed: CONFIG.sim_seed,
+        frequency_secs: CONFIG.sim_frequency_secs,
+        qos: CONFIG.broker_qos,
+    }
+}
 
-    let mut simulation = Simulation::new(
-        &CONFIG.broker_client_id,
-        CONFIG.sim_devices,
-        CONFIG.sim_data_points,
-        CONFIG.sim_seed,
-    );
+async fn simulate(client: AsyncClient, parms: SimulationParameters) {
+    let metering = Metering::new();
 
-    let frequency = Duration::from_secs(CONFIG.sim_frequency_secs);
-    let datapoints = CONFIG.sim_devices * CONFIG.sim_data_points;
+    let mut simulation = Simulation::new(&parms);
+    let frequency = Duration::from_secs(parms.frequency_secs);
+    let datapoints = parms.devices * parms.data_points;
     let qos = get_qos();
 
-    // TBD: implement the runs
-    loop {
+    for _ in 0..CONFIG.sim_runs {
         let simulation_span = span!(tracing::Level::INFO, "simulation_run");
         let _enter = simulation_span.enter();
-        debug!(parent: &simulation_span, sim_devices = CONFIG.sim_devices, sim_data_points = CONFIG.sim_data_points, sim_frequency = CONFIG.sim_frequency_secs, sim_seed = CONFIG.sim_seed, "Running simulation");
+        debug!(parent: &simulation_span, sim_devices = parms.devices, sim_data_points = parms.data_points, sim_frequency = parms.frequency_secs, sim_seed = parms.seed, "Running simulation");
 
         let start = Instant::now();
         for (topic, data) in simulation.iter() {
@@ -148,4 +154,15 @@ async fn create_mqtt_client() -> (AsyncClient, EventLoop) {
     opts.set_keep_alive(Duration::from_secs(5));
 
     AsyncClient::new(opts, CONFIG.capacity)
+}
+
+fn anonymize(s: &str) -> String {
+    format!("{}…{}", &s[..1], &s[s.len() - 1..])
+}
+
+fn anonymize_opt(s: &Option<String>) -> String {
+    match s {
+        Some(s) => anonymize(s),
+        None => "None".to_string(),
+    }
 }
