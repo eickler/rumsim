@@ -2,11 +2,11 @@ name: Docker
 
 on:
   push:
-    branches: ["master"]
-    # Publish semver tags as releases.
-    tags: ["v*.*.*"]
+    branches: ["main"]
   pull_request:
-    branches: ["master"]
+    branches: ["main"]
+  release:
+    types: [created]
 
 env:
   REGISTRY: ghcr.io
@@ -23,6 +23,10 @@ jobs:
       id-token: write
 
     steps:
+      # Debugging help...
+      - name: Print GitHub context
+        run: echo "${{ toJson(github) }}"
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
