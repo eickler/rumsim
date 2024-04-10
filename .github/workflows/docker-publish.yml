@@ -71,7 +71,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Docker image (x86_64)
+      - name: Build and push Docker image (amd64)
         if: github.event_name == 'release'
         id: build-and-push-arm
         uses: docker/build-push-action@v5.3.0
@@ -81,6 +81,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
